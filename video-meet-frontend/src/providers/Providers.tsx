@@ -98,9 +98,9 @@ const ReduxProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         setupStore()
     }, [])
 
-    if (!isStoreReady) {
-        return <InitializationLoader />
-    }
+    // if (!isStoreReady) {
+    //     return <InitializationLoader />
+    // }
 
     return (
         <ReduxErrorBoundary>
@@ -212,9 +212,9 @@ const AuthInitProvider: React.FC<{ children: React.ReactNode }> = ({ children })
         initAuth()
     }, [])
 
-    if (!isAuthInitialized) {
-        return <InitializationLoader />
-    }
+    // if (!isAuthInitialized) {
+    //     return <InitializationLoader />
+    // }
 
     return <>{children}</>
 }
