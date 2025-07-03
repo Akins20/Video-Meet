@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { Types } from 'mongoose';
 import User from '@/models/User';
@@ -389,7 +389,7 @@ export class AuthService {
   static async resetPassword(resetData: PasswordResetData): Promise<APIResponse> {
     try {
       // Find user by reset token
-      const user = await User.findByPasswordResetToken(resetData.token);
+      const user = await (User as any).findByPasswordResetToken(resetData.token);
 
       if (!user) {
         return {
@@ -471,15 +471,15 @@ export class AuthService {
     };
 
     const accessToken = jwt.sign(
-      payload,
-      config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
+      { ...payload },
+      config.jwt.secret as Secret,
+      { expiresIn: config.jwt.expiresIn } as SignOptions
     );
 
     const refreshToken = jwt.sign(
-      payload,
-      config.jwt.refreshSecret,
-      { expiresIn: config.jwt.refreshExpiresIn }
+      { ...payload },
+      config.jwt.refreshSecret as Secret,
+      { expiresIn: config.jwt.refreshExpiresIn } as SignOptions
     );
 
     return { accessToken, refreshToken };
@@ -495,7 +495,7 @@ export class AuthService {
     
     if (!match) return 900; // Default 15 minutes
 
-    const value = parseInt(match[1]);
+    const value = parseInt(match[1] || "15");
     const unit = match[2];
 
     switch (unit) {

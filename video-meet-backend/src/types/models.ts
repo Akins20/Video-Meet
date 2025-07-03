@@ -360,3 +360,17 @@ export interface SocketEventData {
     enabled: boolean;
   };
 }
+
+/**
+ * Minimal WebRTC type definitions for Node.js compatibility
+ */
+export interface RTCSessionDescriptionInit {
+  type: 'offer' | 'answer' | 'pranswer' | 'rollback';
+  sdp?: string;
+}
+export interface RTCIceCandidateInit {
+  candidate?: string;
+  sdpMid?: string;
+  sdpMLineIndex?: number;
+  usernameFragment?: string;
+}
