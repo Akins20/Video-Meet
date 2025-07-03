@@ -3,7 +3,7 @@ import { Inter, Fira_Code } from 'next/font/google'
 import './globals.css'
 
 // Redux Provider
-import { Providers } from '@/components/providers/Providers'
+import { Providers } from '@/providers/Providers'
 
 // Toast notifications
 import { Toaster } from 'react-hot-toast'

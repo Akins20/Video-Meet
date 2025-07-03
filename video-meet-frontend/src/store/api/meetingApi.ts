@@ -6,10 +6,10 @@ export interface CreateMeetingRequest {
     title: string
     description?: string
     type: 'instant' | 'scheduled' | 'recurring'
-    maxParticipants: number
+    maxParticipants?: number
     password?: string
     scheduledAt?: string
-    settings: Partial<MeetingSettings>
+    settings?: Partial<MeetingSettings>
 }
 
 export interface JoinMeetingRequest {
