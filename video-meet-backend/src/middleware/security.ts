@@ -3,8 +3,8 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import cors from "cors";
 import compression from "compression";
-import { RateLimitError, createError } from "@/middleware/errorHandler";
-import config from "@/config";
+import { RateLimitError, createError } from "../middleware/errorHandler";
+import config from "../config";
 
 /**
  * Extended Request interface for rate limiting
@@ -152,7 +152,7 @@ const createRateLimit = (options: {
       if (totalHits > options.maxRequests) {
         const error = new RateLimitError(
           options.message ||
-            `Too many requests. Limit: ${options.maxRequests} per ${options.windowMs}ms`
+          `Too many requests. Limit: ${options.maxRequests} per ${options.windowMs}ms`
         );
 
         // Add Retry-After header

@@ -1,8 +1,8 @@
 import { Response } from "express";
-import { AuthenticatedRequest } from "@/middleware/auth";
-import ParticipantService from "@/services/ParticipantService";
-import { asyncHandler, createError } from "@/middleware/errorHandler";
-import { APIResponse } from "@/types/models";
+import { AuthenticatedRequest } from "../middleware/auth";
+import ParticipantService from "../services/ParticipantService";
+import { asyncHandler, createError } from "../middleware/errorHandler";
+import { APIResponse } from "../types/models";
 
 /**
  * Participant Controller
@@ -437,9 +437,8 @@ export class ParticipantController {
       // Success response
       const response: APIResponse = {
         success: true,
-        message: `Screen sharing ${
-          sharing ? "started" : "stopped"
-        } successfully`,
+        message: `Screen sharing ${sharing ? "started" : "stopped"
+          } successfully`,
         data: { participant: result.data },
       };
 

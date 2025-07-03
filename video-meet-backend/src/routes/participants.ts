@@ -1,10 +1,10 @@
 import { Router } from "express";
-import ParticipantController from "@/controllers/ParticipantController";
+import ParticipantController from "../controllers/ParticipantController";
 import {
   requireAuth,
   requireMeetingParticipant,
   requireSelfOrModerator,
-} from "@/middleware/auth";
+} from "../middleware/auth";
 import {
   validateMediaStateUpdate,
   validateConnectionQualityUpdate,
@@ -13,8 +13,8 @@ import {
   validateObjectIdParam,
   validatePagination,
   sanitizeInput,
-} from "@/middleware/validation";
-import { generalRateLimit, signalingRateLimit } from "@/middleware/security";
+} from "../middleware/validation";
+import { generalRateLimit, signalingRateLimit } from "../middleware/security";
 
 const router = Router();
 

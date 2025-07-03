@@ -1,18 +1,18 @@
 import { Router } from "express";
-import AuthController from "@/controllers/AuthController";
+import AuthController from "../controllers/AuthController";
 import {
   requireAuth,
   optionalAuth,
   validateRefreshToken,
-} from "@/middleware/auth";
+} from "../middleware/auth";
 import {
   validateUserRegistration,
   validateUserLogin,
   validatePasswordResetRequest,
   validatePasswordReset,
   sanitizeInput,
-} from "@/middleware/validation";
-import { authRateLimit, generalRateLimit } from "@/middleware/security";
+} from "../middleware/validation";
+import { authRateLimit, generalRateLimit } from "../middleware/security";
 
 const router = Router();
 

@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { Error as MongooseError } from "mongoose";
 import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
-import { APIResponse } from "@/types/models";
-import config from "@/config";
+import { APIResponse } from "../types/models";
+import config from "../config";
 
 /**
  * Custom application error class

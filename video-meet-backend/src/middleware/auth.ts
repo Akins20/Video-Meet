@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { User } from "@/models/User";
-import { IUser, ITokenPayload } from "@/types/models";
-import config from "@/config";
+import { User } from "../models/User";
+import { IUser, ITokenPayload } from "../types/models";
+import config from "../config";
 
 /**
  * Extended Request interface to include authenticated user

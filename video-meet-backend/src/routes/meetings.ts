@@ -1,6 +1,6 @@
 import { Router } from "express";
-import MeetingController from "@/controllers/MeetingController";
-import ParticipantController from "@/controllers/ParticipantController";
+import MeetingController from "../controllers/MeetingController";
+import ParticipantController from "../controllers/ParticipantController";
 import {
   requireAuth,
   optionalAuth,
@@ -9,7 +9,7 @@ import {
   requireModerator,
   requirePermission,
   requireSelfOrModerator,
-} from "@/middleware/auth";
+} from "../middleware/auth";
 import {
   validateMeetingCreation,
   validateMeetingJoin,
@@ -22,12 +22,12 @@ import {
   validateObjectIdParam,
   validateRoomIdParam,
   sanitizeInput,
-} from "@/middleware/validation";
+} from "../middleware/validation";
 import {
   meetingCreationRateLimit,
   generalRateLimit,
   signalingRateLimit,
-} from "@/middleware/security";
+} from "../middleware/security";
 
 const router = Router();
 

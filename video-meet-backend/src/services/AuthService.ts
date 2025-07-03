@@ -1,9 +1,9 @@
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { Types } from 'mongoose';
-import User from '@/models/User';
-import { IUser, ITokenPayload, APIResponse } from '@/types/models';
-import config from '@/config';
+import User from '../models/User';
+import { IUser, ITokenPayload, APIResponse } from '../types/models';
+import config from '../config';
 
 /**
  * Interface for registration data
@@ -297,7 +297,7 @@ export class AuthService {
   static async logout(userId: string, refreshToken: string): Promise<APIResponse> {
     try {
       const user = await User.findById(userId).select('+refreshTokens');
-      
+
       if (user) {
         user.removeRefreshToken(refreshToken);
         await user.save();
@@ -345,9 +345,9 @@ export class AuthService {
    */
   static async requestPasswordReset(email: string): Promise<APIResponse> {
     try {
-      const user = await User.findOne({ 
-        email: email.toLowerCase(), 
-        isActive: true 
+      const user = await User.findOne({
+        email: email.toLowerCase(),
+        isActive: true
       });
 
       if (!user) {
@@ -402,10 +402,10 @@ export class AuthService {
       // Update password and clear reset token
       user.password = resetData.newPassword; // Will be hashed by pre-save middleware
       user.clearPasswordResetToken();
-      
+
       // Clear all refresh tokens (logout from all devices for security)
       user.refreshTokens = [];
-      
+
       await user.save();
 
       return {
@@ -441,13 +441,13 @@ export class AuthService {
   static async verifyAccessToken(token: string): Promise<ITokenPayload | null> {
     try {
       const decoded = jwt.verify(token, config.jwt.secret) as ITokenPayload;
-      
+
       // Verify user still exists and is active
-      const user = await User.findOne({ 
-        _id: decoded.userId, 
-        isActive: true 
+      const user = await User.findOne({
+        _id: decoded.userId,
+        isActive: true
       });
-      
+
       if (!user) {
         return null;
       }
@@ -492,7 +492,7 @@ export class AuthService {
     // Parse JWT expiry time (e.g., "15m" -> 900 seconds)
     const expiresIn = config.jwt.expiresIn;
     const match = expiresIn.match(/^(\d+)([smhd])$/);
-    
+
     if (!match) return 900; // Default 15 minutes
 
     const value = parseInt(match[1] || "15");

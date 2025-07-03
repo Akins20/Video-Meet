@@ -1,5 +1,5 @@
 import mongoose, { Schema, Model } from "mongoose";
-import { IParticipant } from "@/types/models";
+import { IParticipant } from "../types/models";
 
 /**
  * Participant Schema Definition

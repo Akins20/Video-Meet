@@ -1,6 +1,6 @@
 import mongoose, { Schema, Model } from "mongoose";
 import crypto from "crypto";
-import { IMeeting } from "@/types/models";
+import { IMeeting } from "../types/models";
 
 /**
  * Meeting Schema Definition

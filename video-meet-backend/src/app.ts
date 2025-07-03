@@ -4,11 +4,11 @@ import { Server as SocketIOServer } from "socket.io";
 import path from "path";
 
 // Configuration and Database
-import config from "@/config";
-import { connectDatabase } from "@/config/database";
+import config from "./config";
+import { connectDatabase } from "./config/database";
 
 // Routes
-import apiRoutes from "@/routes";
+import apiRoutes from "./routes";
 
 // Middleware
 import {
@@ -18,7 +18,7 @@ import {
   requestSizeLimit,
   securityLogger,
   initSecurity,
-} from "@/middleware/security";
+} from "./middleware/security";
 import {
   errorHandler,
   notFoundHandler,
@@ -27,11 +27,11 @@ import {
   handleUnhandledRejection,
   handleUncaughtException,
   handleSIGTERM,
-} from "@/middleware/errorHandler";
-import { sanitizeInput } from "@/middleware/validation";
+} from "./middleware/errorHandler";
+import { sanitizeInput } from "./middleware/validation";
 
 // Types
-import { APIResponse } from "@/types/models";
+import { APIResponse } from "./types/models";
 
 /**
  * Express Application Class
@@ -127,11 +127,12 @@ class VideoMeetApp {
     // Health check endpoint (for load balancers)
     this.app.get("/health", (req: Request, res: Response) => {
       if (this.isShuttingDown) {
-        return res.status(503).json({
+        res.status(503).json({
           success: false,
           message: "Server is shutting down",
           error: { code: "SERVER_SHUTTING_DOWN" },
         });
+        return;
       }
 
       const response: APIResponse = {

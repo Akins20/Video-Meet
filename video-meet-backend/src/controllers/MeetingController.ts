@@ -1,9 +1,9 @@
 import { Response } from "express";
-import { AuthenticatedRequest } from "@/middleware/auth";
-import MeetingService from "@/services/MeetingService";
-import ParticipantService from "@/services/ParticipantService";
-import { asyncHandler, createError } from "@/middleware/errorHandler";
-import { APIResponse } from "@/types/models";
+import { AuthenticatedRequest } from "../middleware/auth";
+import MeetingService from "../services/MeetingService";
+import ParticipantService from "../services/ParticipantService";
+import { asyncHandler, createError } from "../middleware/errorHandler";
+import { APIResponse } from "../types/models";
 
 /**
  * Meeting Controller

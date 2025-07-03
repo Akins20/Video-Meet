@@ -2,10 +2,10 @@ import { Router } from "express";
 import authRoutes from "./auth";
 import meetingRoutes from "./meetings";
 import participantRoutes from "./participants";
-import { generalRateLimit } from "@/middleware/security";
-import { asyncHandler } from "@/middleware/errorHandler";
-import { APIResponse } from "@/types/models";
-import config from "@/config";
+import { generalRateLimit } from "../middleware/security";
+import { asyncHandler } from "../middleware/errorHandler";
+import { APIResponse } from "../types/models";
+import config from "../config";
 
 const router = Router();
 

@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { IParticipant, IMeeting, APIResponse } from "@/types/models";
+import { IParticipant, IMeeting, APIResponse } from "../types/models";
 
 /**
  * Interface for updating participant media state
@@ -503,9 +503,8 @@ export class ParticipantService {
 
       return {
         success: true,
-        message: `Participant ${
-          muteData.muted ? "muted" : "unmuted"
-        } successfully`,
+        message: `Participant ${muteData.muted ? "muted" : "unmuted"
+          } successfully`,
         data: participant,
       };
     } catch (error) {
@@ -727,9 +726,9 @@ export class ParticipantService {
       const averageSessionDuration =
         completedSessions.length > 0
           ? completedSessions.reduce(
-              (sum, p) => sum + (p.sessionDuration || 0),
-              0
-            ) / completedSessions.length
+            (sum, p) => sum + (p.sessionDuration || 0),
+            0
+          ) / completedSessions.length
           : 0;
 
       // Connection quality distribution

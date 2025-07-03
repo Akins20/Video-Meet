@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import config from '@/config';
+import config from '../config';
 
 /**
  * Database connection manager
@@ -39,14 +39,12 @@ class DatabaseConnection {
         maxPoolSize: 10, // Maximum number of connections
         serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
         socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-        bufferMaxEntries: 0, // Disable mongoose buffering
-        bufferCommands: false, // Disable mongoose buffering for commands
 
         // Automatic reconnection
         maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
 
         // Database name (extracted from URI or use default)
-        dbName: this.extractDatabaseName(config.database.uri),
+        dbName: "videomeet",
       };
 
       // Connect to MongoDB
@@ -54,7 +52,7 @@ class DatabaseConnection {
 
       this.isConnected = true;
       console.log('✅ Connected to MongoDB successfully');
-      console.log(`📊 Database: ${this.extractDatabaseName(config.database.uri)}`);
+      console.log(`📊 Database: ${connectionOptions.dbName}`);
 
       // Set up connection event listeners
       this.setupEventListeners();

@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import crypto from "crypto";
-import { IMeeting, IParticipant, IUser, APIResponse } from "@/types/models";
+import { IMeeting, IParticipant, IUser, APIResponse } from "../types/models";
 
 /**
  * Interface for creating a new meeting
@@ -344,7 +344,7 @@ export class MeetingService {
           meeting.duration = Math.floor(
             (meeting.endedAt.getTime() -
               (meeting.startedAt?.getTime() || meeting.createdAt.getTime())) /
-              1000
+            1000
           );
         }
 
@@ -397,7 +397,7 @@ export class MeetingService {
       meeting.duration = Math.floor(
         (meeting.endedAt.getTime() -
           (meeting.startedAt?.getTime() || meeting.createdAt.getTime())) /
-          1000
+        1000
       );
       await meeting.save();
 
