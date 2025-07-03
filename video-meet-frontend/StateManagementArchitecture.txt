@@ -1,0 +1,23 @@
+┌─────────────────────────────────────────────────────────────────┐
+│                    STATE MANAGEMENT FLOW                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ Redux Store                                                     │
+│ ├── Auth Slice (user, tokens, login status)                    │
+│ ├── Meeting Slice (current meeting, participants, settings)    │
+│ ├── UI Slice (modals, notifications, loading states)           │
+│ └── API Slice (RTK Query for server state)                     │
+│                                                                 │
+│ Real-time Updates (Socket.IO)                                  │
+│ ├── Meeting events (join/leave)                                │
+│ ├── Participant updates (media state, connection)             │
+│ ├── Chat messages                                             │
+│ └── WebRTC signaling                                          │
+│                                                                 │
+│ Local State (React hooks)                                      │
+│ ├── Form state (React Hook Form)                              │
+│ ├── Media devices (camera/microphone)                         │
+│ ├── WebRTC connections                                        │
+│ └── UI interactions (modals, tooltips)                        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘

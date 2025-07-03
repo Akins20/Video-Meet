@@ -1,0 +1,53 @@
+video-meet-frontend/
+├── src/
+│   ├── app/                     # Next.js App Router
+│   │   ├── (auth)/             # Authentication routes
+│   │   │   ├── login/
+│   │   │   ├── register/
+│   │   │   └── forgot-password/
+│   │   ├── (dashboard)/        # Protected dashboard routes
+│   │   │   ├── dashboard/
+│   │   │   ├── meetings/
+│   │   │   └── settings/
+│   │   ├── meeting/            # Meeting room
+│   │   │   └── [roomId]/
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   │
+│   ├── components/             # Reusable components
+│   │   ├── ui/                # shadcn/ui components
+│   │   ├── auth/              # Authentication components
+│   │   ├── meeting/           # Meeting-specific components
+│   │   ├── dashboard/         # Dashboard components
+│   │   └── common/            # Shared components
+│   │
+│   ├── hooks/                 # Custom React hooks
+│   │   ├── useAuth.ts
+│   │   ├── useSocket.ts
+│   │   ├── useWebRTC.ts
+│   │   └── useMeeting.ts
+│   │
+│   ├── lib/                   # Utility libraries
+│   │   ├── api.ts            # API client setup
+│   │   ├── socket.ts         # Socket.IO client
+│   │   ├── webrtc.ts         # WebRTC utilities
+│   │   ├── auth.ts           # Auth utilities
+│   │   └── utils.ts          # General utilities
+│   │
+│   ├── store/                # Redux store
+│   │   ├── index.ts          # Store configuration
+│   │   ├── authSlice.ts      # Authentication state
+│   │   ├── meetingSlice.ts   # Meeting state
+│   │   ├── participantSlice.ts # Participant state
+│   │   └── api/              # RTK Query API slices
+│   │
+│   ├── types/                # TypeScript definitions
+│   │   ├── api.ts            # API response types
+│   │   ├── meeting.ts        # Meeting-related types
+│   │   └── auth.ts           # Auth-related types
+│   │
+│   └── utils/                # Utility functions
+│       ├── validation.ts     # Form validation schemas
+│       ├── constants.ts      # App constants
+│       └── helpers.ts        # Helper functions

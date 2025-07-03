@@ -1,0 +1,14 @@
+┌─────────────────────────────────────────────────────────────────┐
+│                    FRONTEND TECHNOLOGY STACK                   │
+├─────────────────────────────────────────────────────────────────┤
+│ Framework: Next.js 14+ (App Router)                            │
+│ Language: TypeScript                                           │
+│ Styling: Tailwind CSS + shadcn/ui                             │
+│ State Management: Redux Toolkit + RTK Query                    │
+│ Real-time: Socket.IO Client                                    │
+│ WebRTC: Simple-peer or native WebRTC APIs                     │
+│ Forms: React Hook Form + Zod validation                       │
+│ Icons: Lucide React                                           │
+│ Animations: Framer Motion                                     │
+│ Testing: Jest + React Testing Library                         │
+└─────────────────────────────────────────────────────────────────┘

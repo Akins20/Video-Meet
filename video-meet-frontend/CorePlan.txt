@@ -1,0 +1,19 @@
+// Authentication Flow
+AuthGuard → ProtectedRoute → Dashboard/Meeting
+
+// Meeting Room Architecture
+MeetingRoom
+├── MeetingHeader (title, participants count, controls)
+├── VideoGrid (participant video tiles)
+├── LocalVideo (user's own video)
+├── MeetingControls (mute, video, screen share, leave)
+├── ChatPanel (messages, participant list)
+├── SettingsPanel (audio/video settings)
+└── NotificationToast (meeting events)
+
+// Dashboard Components
+Dashboard
+├── MeetingList (recent/scheduled meetings)
+├── QuickJoin (join by room ID)
+├── CreateMeeting (new meeting form)
+└── UserProfile (settings, preferences)
