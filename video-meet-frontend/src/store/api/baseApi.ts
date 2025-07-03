@@ -188,25 +188,40 @@ export const apiUtils = {
     /**
      * Invalidate specific tags
      */
-    invalidateTags: (tags: string[]) => api.util.invalidateTags(tags),
+    invalidateTags: (tags: typeof tagTypes[number][]) =>
+        api.util.invalidateTags(
+            tags.map((tag) => ({ type: tag }))
+        ),
 
     /**
      * Prefetch data
      */
-    prefetch: (endpointName: string, arg: any, options?: any) =>
+    prefetch: (endpointName: never, arg: never, options?: any) =>
         api.util.prefetch(endpointName, arg, options),
 
     /**
      * Get cached data
      */
-    getCache: (endpointName: string, arg: any) =>
-        api.endpoints[endpointName].select(arg),
+    getCache: (endpointName: string, arg: any) => {
+        const endpoint = (api.endpoints as Record<string, any>)[endpointName]
+        return endpoint?.select ? endpoint.select(arg) : undefined
+    },
 
     /**
      * Update cached data optimistically
      */
-    updateCache: (endpointName: string, arg: any, updateFn: (draft: any) => void) =>
-        api.util.updateQueryData(endpointName, arg, updateFn),
+    updateCache: (endpointName: never, arg: never, updateFn: (draft: any) => void) => {
+        // Warn if using a string for endpoints that expect an object
+        if (
+            (endpointName === 'getChatMessages' || endpointName === 'getMeetings') &&
+            typeof arg === 'string'
+        ) {
+            console.warn(
+                `[apiUtils.updateCache] Warning: '${endpointName}' expects an object argument (e.g., { meetingId }), but received a string. This may cause runtime or type errors.`
+            )
+        }
+        return api.util.updateQueryData(endpointName, arg, updateFn)
+    },
 
     /**
      * Subscribe to cache changes
@@ -297,7 +312,8 @@ export const createDedupedEndpoint = <Args, Result>(
                 return pendingRequests.get(key)!
             }
 
-            const request = api.endpoints[endpointName].initiate(args)
+            // Type assertion to allow dynamic endpoint access
+            const request = (api.endpoints as Record<string, any>)[endpointName].initiate(args)
             pendingRequests.set(key, request)
 
             // Clean up after request completes

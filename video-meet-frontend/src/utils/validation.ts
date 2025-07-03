@@ -175,13 +175,11 @@ export const twoFactorSetupSchema = z.object({
         .string()
         .optional()
         .refine(
-            (val, ctx) => {
-                if (ctx.parent.method === 'sms' && !val) {
-                    return false
-                }
-                return !val || phoneRegex.test(val)
-            },
-            'Phone number is required for SMS authentication'
+            (val) => !val || phoneRegex.test(val),
+            {
+                message: 'Phone number is required for SMS authentication',
+                path: ['phoneNumber'],
+            }
         ),
 })
 

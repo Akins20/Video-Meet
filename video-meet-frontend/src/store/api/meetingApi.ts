@@ -282,7 +282,7 @@ export const meetingApi = api.injectEndpoints({
             ],
             ...commonQueryOptions,
             // Polling for real-time updates (fallback if WebSocket fails)
-            pollingInterval: 5000,
+            // pollingInterval: 5000,
         }),
 
         // Update participant media state
@@ -354,7 +354,7 @@ export const meetingApi = api.injectEndpoints({
 
                 // Add optimistic message to cache
                 const patchResult = dispatch(
-                    meetingApi.util.updateQueryData('getChatMessages', meetingId, (draft) => {
+                    meetingApi.util.updateQueryData('getChatMessages', { meetingId }, (draft) => {
                         draft.data?.messages.push(optimisticMessage)
                     })
                 )
@@ -429,7 +429,7 @@ export const meetingApi = api.injectEndpoints({
             query: (meetingId) => `/meetings/${meetingId}/recording/status`,
             ...commonQueryOptions,
             // Poll recording status
-            pollingInterval: 2000,
+            // pollingInterval: 2000,
         }),
 
         // Get meeting analytics
@@ -463,7 +463,7 @@ export const meetingApi = api.injectEndpoints({
         }>, string>({
             query: (meetingId) => `/meetings/${meetingId}/network-status`,
             ...commonQueryOptions,
-            pollingInterval: 5000, // Poll network status every 5 seconds
+            // pollingInterval: 5000, // Poll network status every 5 seconds
         }),
 
         // Share file in meeting
@@ -550,11 +550,11 @@ export const {
 export const meetingApiUtils = {
     // Prefetch meeting data
     prefetchMeeting: (roomId: string) =>
-        meetingApi.util.prefetch('getMeeting', roomId),
+        meetingApi.util.prefetch('getMeeting', roomId, { force: false }),
 
     // Prefetch user meetings
     prefetchMeetings: () =>
-        meetingApi.util.prefetch('getMeetings', {}),
+        meetingApi.util.prefetch('getMeetings', {}, { force: false }),
 
     // Get cached meeting
     getCachedMeeting: (roomId: string) =>

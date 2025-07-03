@@ -450,7 +450,7 @@ export const useAuth = () => {
 
         // Utilities
         hasPermission: checkPermission,
-        hasRole: (role: string) => userData?.role === role,
+        hasRole: (role: string) => (userData && 'role' in userData) ? (userData as any).role === role : false,
         isEmailVerified: userData?.isEmailVerified || false,
         displayName: userData?.displayName || 'User',
         initials: userData?.initials || '??',

@@ -437,7 +437,6 @@ export class WebRTCManager {
     public isWebRTCSupported(): boolean {
         return !!(
             navigator.mediaDevices &&
-            navigator.mediaDevices.getUserMedia &&
             window.RTCPeerConnection &&
             window.RTCSessionDescription &&
             window.RTCIceCandidate

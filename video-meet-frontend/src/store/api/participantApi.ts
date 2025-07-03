@@ -496,7 +496,6 @@ export const participantApi = api.injectEndpoints({
             ...commonQueryOptions,
             keepUnusedDataFor: 60, // 1 minute
             // Poll for status updates
-            pollingInterval: 30000, // 30 seconds
         }),
 
         // Import contacts from external sources
@@ -586,11 +585,11 @@ export const {
 export const participantApiUtils = {
     // Prefetch contacts
     prefetchContacts: (query: ContactListQuery = {}) =>
-        participantApi.util.prefetch('getContacts', query),
+        participantApi.util.prefetch('getContacts', query, { force: false }),
 
     // Prefetch search results
     prefetchSearch: (query: string) =>
-        participantApi.util.prefetch('searchParticipants', { query }),
+        participantApi.util.prefetch('searchParticipants', { query }, { force: false }),
 
     // Get cached contacts
     getCachedContacts: (query: ContactListQuery = {}) =>
@@ -614,12 +613,13 @@ export const participantApiUtils = {
     // Debounced search function
     searchDebounced: (() => {
         let timeoutId: NodeJS.Timeout
-        return (query: string, callback: (results: ParticipantSearchResult[]) => void) => {
+        return (query: string, callback: (results: ParticipantSearchResult[]) => void, dispatch?: any) => {
             clearTimeout(timeoutId)
             timeoutId = setTimeout(async () => {
                 try {
-                    const result = await participantApi.endpoints.searchParticipants.initiate({ query })
-                    callback(result.data?.data.results || [])
+                    if (!dispatch) throw new Error('Dispatch function is required')
+                    const result = await dispatch(participantApi.endpoints.searchParticipants.initiate({ query })).unwrap()
+                    callback(result.data?.results || [])
                 } catch {
                     callback([])
                 }

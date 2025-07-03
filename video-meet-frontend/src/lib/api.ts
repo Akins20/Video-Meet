@@ -49,7 +49,7 @@ class ApiClient {
                 config.headers['X-Request-ID'] = this.generateRequestId()
 
                 // Add timestamp for performance monitoring
-                config.metadata = { startTime: Date.now() }
+                // config.metadata = { startTime: Date.now() }
 
                 // Add auth token if available
                 const token = this.getAccessToken()
@@ -76,20 +76,20 @@ class ApiClient {
         this.client.interceptors.response.use(
             (response: AxiosResponse) => {
                 // Calculate request duration
-                const duration = Date.now() - (response.config.metadata?.startTime || 0)
+                // const duration = Date.now() - (response.config.metadata?.startTime || 0)
 
-                // Log response in development
-                if (ENV_CONFIG.isDevelopment) {
-                    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url} (${duration}ms)`, {
-                        status: response.status,
-                        data: response.data,
-                    })
+                // // Log response in development
+                // if (ENV_CONFIG.isDevelopment) {
+                //     console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url} (${duration}ms)`, {
+                //         status: response.status,
+                //         data: response.data,
+                //     })
 
-                    // Warn about slow requests
-                    if (duration > 2000) {
-                        console.warn(`⚠️ Slow API request detected: ${response.config.url} took ${duration}ms`)
-                    }
-                }
+                //     // Warn about slow requests
+                //     if (duration > 2000) {
+                //         console.warn(`⚠️ Slow API request detected: ${response.config.url} took ${duration}ms`)
+                //     }
+                // }
 
                 // Transform response data
                 return this.transformSuccessResponse(response)
@@ -231,7 +231,7 @@ class ApiClient {
         response.data._meta = {
             status: response.status,
             statusText: response.statusText,
-            duration: Date.now() - (response.config.metadata?.startTime || 0),
+            // duration: Date.now() - (response.config.metadata?.startTime || 0),
             requestId: response.config.headers['X-Request-ID'],
         }
 

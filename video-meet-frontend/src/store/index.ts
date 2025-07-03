@@ -1,7 +1,7 @@
 import { configureStore, combineReducers } from '@reduxjs/toolkit'
 import { persistStore, persistReducer, FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER } from 'redux-persist'
 import storage from 'redux-persist/lib/storage' // localStorage
-import { encryptTransform } from 'redux-persist-transform-encrypt'
+import { encryptTransform as createEncryptTransform } from 'redux-persist-transform-encrypt'
 
 // Import reducers
 import authReducer from './authSlice'
@@ -11,7 +11,7 @@ import participantReducer from './participantSlice'
 // import uiReducer from './uiSlice'
 
 // Encryption transform for sensitive data
-const encryptTransform = encryptTransform({
+const encryptTransform = createEncryptTransform({
     secretKey: process.env.NEXT_PUBLIC_ENCRYPTION_KEY || 'video-meet-default-key-change-in-production',
     onError: (error) => {
         console.error('Redux persist encryption error:', error)

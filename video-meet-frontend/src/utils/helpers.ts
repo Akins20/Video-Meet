@@ -1,7 +1,8 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { REGEX_PATTERNS, TIME_CONFIG, MEETING_LIMITS } from './constants'
-import type { User, MeetingParticipant, ConnectionQuality } from '../types'
+import type { MeetingParticipant, ConnectionQuality } from '@/types/meeting'
+import type { User } from '@/types/auth'
 
 // Tailwind CSS class merging utility
 export const cn = (...inputs: ClassValue[]) => {
@@ -460,7 +461,7 @@ export const userUtils = {
      */
     canAccessFeature: (user: Partial<User>, feature: string): boolean => {
         if (!user.accountType) return false
-        const userFeatures = MEETING_LIMITS.features[user.accountType as keyof typeof MEETING_LIMITS.features] || []
+        const userFeatures: string[] = Array.from(MEETING_LIMITS.features[user.accountType as keyof typeof MEETING_LIMITS.features] || [])
         return userFeatures.includes(feature) || userFeatures.includes('all_' + feature.split('_')[0])
     },
 }
@@ -707,7 +708,7 @@ export const deviceUtils = {
     supportsWebRTC: (): boolean => {
         return !!(
             navigator.mediaDevices &&
-            navigator.mediaDevices.getUserMedia &&
+            typeof navigator.mediaDevices.getUserMedia === 'function' &&
             window.RTCPeerConnection
         )
     },

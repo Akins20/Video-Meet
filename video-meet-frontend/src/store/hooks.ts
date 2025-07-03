@@ -130,7 +130,7 @@ export const useUserPermissions = () => {
 
 // Hook for comparing previous state values
 export const usePrevious = <T>(value: T): T | undefined => {
-    const ref = useRef<T>()
+    const ref = useRef<T>(undefined)
 
     useEffect(() => {
         ref.current = value
@@ -155,7 +155,8 @@ export const useAuthStateChanges = (
 
 // Hook for periodic token refresh
 export const useTokenRefresh = () => {
-    const { isAuthenticated, tokenExpiresAt, isRefreshing } = useAuthStatus()
+    const { isAuthenticated, isRefreshing } = useAuthStatus()
+    const tokenExpiresAt = useAppSelector((state) => state.auth.tokenExpiresAt)
     const dispatch = useAppDispatch()
 
     useEffect(() => {

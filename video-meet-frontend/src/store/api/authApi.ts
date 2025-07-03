@@ -355,7 +355,7 @@ export const {
 // Export additional utilities
 export const authApiUtils = {
     // Prefetch user data
-    prefetchUserData: () => authApi.util.prefetch('getCurrentUser', undefined),
+    prefetchUserData: () => authApi.util.prefetch('getCurrentUser', undefined, { force: false }),
 
     // Get cached user data
     getCachedUser: () => authApi.endpoints.getCurrentUser.select(undefined),
@@ -377,8 +377,9 @@ export const authApiUtils = {
             clearTimeout(timeoutId)
             timeoutId = setTimeout(async () => {
                 try {
-                    const result = await authApi.endpoints.checkUsernameAvailability.initiate(username)
-                    callback(result.data?.data.available || false)
+                    // @ts-ignore
+                    const result = await (await import('../store')).default.dispatch(authApi.endpoints.checkUsernameAvailability.initiate(username)).unwrap()
+                    callback(result.data?.available || false)
                 } catch {
                     callback(false)
                 }
@@ -393,8 +394,9 @@ export const authApiUtils = {
             clearTimeout(timeoutId)
             timeoutId = setTimeout(async () => {
                 try {
-                    const result = await authApi.endpoints.checkEmailAvailability.initiate(email)
-                    callback(result.data?.data.available || false)
+                    // @ts-ignore
+                    const result = await (await import('../store')).default.dispatch(authApi.endpoints.checkEmailAvailability.initiate(email)).unwrap()
+                    callback(result.data?.available || false)
                 } catch {
                     callback(false)
                 }
