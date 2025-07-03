@@ -16,7 +16,9 @@ export class ParticipantController {
   static getParticipant = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
-
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       // Call participant service to get participant
       const result = await ParticipantService.getParticipant(participantId);
 
@@ -47,6 +49,9 @@ export class ParticipantController {
   static updateMediaState = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { audioEnabled, videoEnabled, screenSharing, handRaised } =
         req.body;
       const requester = (req as any).participant;
@@ -101,6 +106,9 @@ export class ParticipantController {
   static updateConnectionQuality = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { latency, bandwidth, packetLoss, quality } = req.body;
       const requester = (req as any).participant;
 
@@ -152,6 +160,9 @@ export class ParticipantController {
   static updateSocketId = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { socketId } = req.body;
       const requester = (req as any).participant;
 
@@ -228,6 +239,9 @@ export class ParticipantController {
   static updatePermissions = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { permissions } = req.body;
       const requester = (req as any).participant;
       const meeting = (req as any).meeting;
@@ -351,6 +365,9 @@ export class ParticipantController {
   static toggleHand = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { raised } = req.body;
       const requester = (req as any).participant;
 
@@ -388,6 +405,9 @@ export class ParticipantController {
   static toggleScreenShare = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { sharing } = req.body;
       const requester = (req as any).participant;
 
@@ -434,7 +454,9 @@ export class ParticipantController {
   static getParticipantStatus = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
-
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       // Get participant details
       const result = await ParticipantService.getParticipant(participantId);
 
@@ -443,7 +465,6 @@ export class ParticipantController {
       }
 
       const participant = result.data!;
-
       // Calculate status information
       const status = {
         participantId: participant._id,
@@ -452,7 +473,7 @@ export class ParticipantController {
         connectionQuality: participant.connectionQuality,
         mediaState: participant.mediaState,
         joinedAt: participant.joinedAt,
-        sessionDuration: participant.getSessionDurationInMinutes(),
+        sessionDuration: participant.sessionDuration || null,
         lastSeen: participant.connectionQuality.lastUpdated,
       };
 
@@ -603,6 +624,9 @@ export class ParticipantController {
   static exportParticipantData = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { format = "json" } = req.query;
       const requester = (req as any).participant;
 

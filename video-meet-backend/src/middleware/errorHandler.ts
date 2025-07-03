@@ -137,15 +137,19 @@ const handleMongooseError = (error: MongooseError): AppError => {
 
       // Handle duplicate key error (E11000)
       if (mongoError.code === 11000) {
-        const field = Object.keys(mongoError.keyPattern)[0];
-        const value = mongoError.keyValue[field];
-
-        return new ConflictError(
-          `${
-            field.charAt(0).toUpperCase() + field.slice(1)
-          } '${value}' already exists`,
-          "DUPLICATE_KEY"
-        );
+        const field = mongoError.keyPattern ? Object.keys(mongoError.keyPattern)[0] : undefined;
+        const value = field && mongoError.keyValue ? mongoError.keyValue[field] : undefined;
+        if (field && value !== undefined) {
+          return new ConflictError(
+            `${field.charAt(0).toUpperCase() + field.slice(1)} '${value}' already exists`,
+            "DUPLICATE_KEY"
+          );
+        } else {
+          return new ConflictError(
+            `Duplicate key error`,
+            "DUPLICATE_KEY"
+          );
+        }
       }
 
       return new AppError(
@@ -190,11 +194,13 @@ const sendDevError = (error: AppError, req: Request, res: Response): void => {
     message: error.message,
     error: {
       code: error.errorCode,
-      details: error.details,
-      stack: error.stack,
-      timestamp: new Date().toISOString(),
-      path: req.path,
-      method: req.method,
+      details: {
+        ...error.details,
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+        path: req.path,
+        method: req.method,
+      },
     },
   };
 

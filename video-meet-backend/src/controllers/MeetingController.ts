@@ -56,7 +56,9 @@ export class MeetingController {
   static getMeeting = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { roomId } = req.params;
-
+      if (!roomId) {
+        throw createError.validation("roomId is required");
+      }
       // Call meeting service to get meeting
       const result = await MeetingService.getMeeting(roomId);
 
@@ -87,12 +89,14 @@ export class MeetingController {
   static joinMeeting = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { roomId } = req.params;
+      if (!roomId) {
+        throw createError.validation("roomId is required");
+      }
       const { password, guestName, deviceInfo } = req.body;
       const userId = req.userId; // Optional for guest users
-
       // Prepare join data
       const joinData = {
-        roomId,
+        roomId: roomId as string,
         password,
         userId,
         guestName,
@@ -150,6 +154,9 @@ export class MeetingController {
   static leaveMeeting = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId } = req.params;
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
       const participant = (req as any).participant; // Set by requireMeetingParticipant middleware
 
       if (!participant) {
@@ -190,6 +197,9 @@ export class MeetingController {
   static endMeeting = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId } = req.params;
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
       const userId = req.userId!;
 
       // Call meeting service to end meeting
@@ -223,6 +233,9 @@ export class MeetingController {
   static updateMeeting = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId } = req.params;
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
       const userId = req.userId!;
       const updateData = req.body;
 
@@ -262,7 +275,9 @@ export class MeetingController {
   static getMeetingParticipants = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId } = req.params;
-
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
       // Call participant service to get participants
       const result = await ParticipantService.getMeetingParticipants(meetingId);
 
@@ -320,7 +335,9 @@ export class MeetingController {
   static getMeetingStats = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId } = req.params;
-
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
       // Call participant service to get meeting statistics
       const result = await ParticipantService.getMeetingStats(meetingId);
 
@@ -346,6 +363,12 @@ export class MeetingController {
   static removeParticipant = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId, participantId } = req.params;
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { reason } = req.body;
       const requester = (req as any).participant; // Set by requireMeetingParticipant middleware
 
@@ -396,6 +419,12 @@ export class MeetingController {
   static changeParticipantRole = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId, participantId } = req.params;
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { newRole } = req.body;
       const requester = (req as any).participant; // Set by requireMeetingParticipant middleware
 
@@ -453,6 +482,12 @@ export class MeetingController {
   static muteParticipant = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId, participantId } = req.params;
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const { muted, type } = req.body; // type: 'audio' | 'video'
       const requester = (req as any).participant; // Set by requireMeetingParticipant middleware
 
@@ -506,6 +541,9 @@ export class MeetingController {
   static updateMediaState = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const mediaData = req.body;
       const requester = (req as any).participant; // Set by requireMeetingParticipant middleware
 
@@ -551,6 +589,9 @@ export class MeetingController {
   static updateConnectionQuality = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { participantId } = req.params;
+      if (!participantId) {
+        throw createError.validation("participantId is required");
+      }
       const qualityData = req.body;
       const requester = (req as any).participant; // Set by requireMeetingParticipant middleware
 
@@ -665,7 +706,9 @@ export class MeetingController {
   static getMeetingHealth = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId } = req.params;
-
+      if (!meetingId) {
+        throw createError.validation("meetingId is required");
+      }
       // Get meeting and participants data
       const [meetingResult, participantsResult] = await Promise.all([
         MeetingService.getMeeting(meetingId),

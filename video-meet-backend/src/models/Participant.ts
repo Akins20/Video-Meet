@@ -281,12 +281,67 @@ ParticipantSchema.pre("save", function (next) {
 });
 
 /**
+ * Helper function: Get default permissions based on role
+ */
+function getDefaultPermissions(
+  role: IParticipant["role"]
+): IParticipant["permissions"] {
+  switch (role) {
+    case "host":
+      return {
+        canMuteOthers: true,
+        canRemoveParticipants: true,
+        canManageRecording: true,
+        canShareScreen: true,
+        canShareFiles: true,
+        canUseWhiteboard: true,
+      };
+    case "moderator":
+      return {
+        canMuteOthers: true,
+        canRemoveParticipants: true,
+        canManageRecording: true,
+        canShareScreen: true,
+        canShareFiles: true,
+        canUseWhiteboard: true,
+      };
+    case "participant":
+      return {
+        canMuteOthers: false,
+        canRemoveParticipants: false,
+        canManageRecording: false,
+        canShareScreen: true,
+        canShareFiles: true,
+        canUseWhiteboard: true,
+      };
+    case "guest":
+      return {
+        canMuteOthers: false,
+        canRemoveParticipants: false,
+        canManageRecording: false,
+        canShareScreen: false,
+        canShareFiles: false,
+        canUseWhiteboard: false,
+      };
+    default:
+      return {
+        canMuteOthers: false,
+        canRemoveParticipants: false,
+        canManageRecording: false,
+        canShareScreen: false,
+        canShareFiles: false,
+        canUseWhiteboard: false,
+      };
+  }
+}
+
+/**
  * Pre-save middleware to set default permissions based on role
  */
 ParticipantSchema.pre("save", function (next) {
   // Set default permissions if this is a new participant
   if (this.isNew) {
-    this.permissions = this.getDefaultPermissions(this.role);
+    this.permissions = getDefaultPermissions(this.role);
   }
   next();
 });
@@ -315,60 +370,16 @@ ParticipantSchema.methods.isOnline = function (): boolean {
   if (this.leftAt) return false;
 
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-  return this.connectionQuality.lastUpdated > fiveMinutesAgo;
-};
-
-/**
- * Instance method: Update connection quality
- */
-ParticipantSchema.methods.updateConnectionQuality = function (
-  metrics: Partial<IParticipant["connectionQuality"]>
-): void {
-  Object.assign(this.connectionQuality, {
-    ...metrics,
-    lastUpdated: new Date(),
-  });
-};
-
-/**
- * Instance method: Check if participant has specific permission
- */
-ParticipantSchema.methods.hasPermission = function (
-  permission: keyof IParticipant["permissions"]
-): boolean {
-  return this.permissions[permission] === true;
-};
-
-/**
- * Instance method: Check if participant is a guest
- */
-ParticipantSchema.methods.isGuest = function (): boolean {
-  return !this.userId || this.role === "guest";
-};
-
-/**
- * Instance method: Check if participant is host or moderator
- */
-ParticipantSchema.methods.canModerate = function (): boolean {
-  return ["host", "moderator"].includes(this.role);
-};
-
-/**
- * Instance method: Get session duration in minutes
- */
-ParticipantSchema.methods.getSessionDurationInMinutes = function (): number {
-  if (!this.sessionDuration) {
-    // Calculate current session duration if still active
-    if (!this.leftAt) {
-      const now = new Date();
-      return Math.floor(
-        (now.getTime() - this.joinedAt.getTime()) / (1000 * 60)
-      );
-    }
-    return 0;
+  if (
+    this.connectionQuality &&
+    this.connectionQuality.lastUpdated &&
+    this.connectionQuality.lastUpdated >= fiveMinutesAgo
+  ) {
+    return true;
   }
-  return Math.floor(this.sessionDuration / 60);
+  return false;
 };
+// (Removed: getDefaultPermissions is now a standalone helper function above)
 
 /**
  * Instance method: Get default permissions based on role

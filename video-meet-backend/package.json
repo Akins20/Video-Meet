@@ -3,6 +3,7 @@
     "version": "2.0.0",
     "description": "Video Meet Backend API Server with WebRTC signaling and local network support",
     "main": "dist/app.js",
+    "private": true,
     "scripts": {
       "dev": "nodemon",
       "build": "tsc",
@@ -23,7 +24,7 @@
       "express",
       "mongodb"
     ],
-    "author": "Your Name",
+    "author": "Akins20",
     "license": "MIT",
     "dependencies": {
       "express": "^4.18.2",

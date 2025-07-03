@@ -9,7 +9,7 @@ class DatabaseConnection {
   private static instance: DatabaseConnection;
   private isConnected: boolean = false;
 
-  private constructor() {}
+  private constructor() { }
 
   /**
    * Singleton pattern to ensure single database connection
@@ -33,7 +33,7 @@ class DatabaseConnection {
     try {
       // Configure mongoose settings for optimal performance
       mongoose.set('strictQuery', true);
-      
+
       const connectionOptions = {
         // Connection pool settings
         maxPoolSize: 10, // Maximum number of connections
@@ -41,24 +41,24 @@ class DatabaseConnection {
         socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
         bufferMaxEntries: 0, // Disable mongoose buffering
         bufferCommands: false, // Disable mongoose buffering for commands
-        
+
         // Automatic reconnection
         maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
-        
+
         // Database name (extracted from URI or use default)
         dbName: this.extractDatabaseName(config.database.uri),
       };
 
       // Connect to MongoDB
       await mongoose.connect(config.database.uri, connectionOptions);
-      
+
       this.isConnected = true;
       console.log('✅ Connected to MongoDB successfully');
       console.log(`📊 Database: ${this.extractDatabaseName(config.database.uri)}`);
-      
+
       // Set up connection event listeners
       this.setupEventListeners();
-      
+
     } catch (error) {
       console.error('❌ Failed to connect to MongoDB:', error);
       throw new Error(`Database connection failed: ${error}`);
@@ -114,7 +114,7 @@ class DatabaseConnection {
   private extractDatabaseName(uri: string): string {
     try {
       const matches = uri.match(/\/([^?]+)/);
-      return matches ? matches[1] : 'videomeet';
+      return matches && matches[1] ? matches[1] : 'videomeet';
     } catch {
       return 'videomeet';
     }
@@ -163,8 +163,11 @@ class DatabaseConnection {
       }
 
       // Ping the database
+      if (!mongoose.connection.db) {
+        return { status: 'disconnected' };
+      }
       await mongoose.connection.db.admin().ping();
-      
+
       return {
         status: 'healthy',
         details: this.getConnectionInfo()
