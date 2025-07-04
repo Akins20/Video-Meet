@@ -252,7 +252,7 @@ export class MeetingService {
         meetingId: meeting._id,
         userId: user?._id,
         displayName: user ? user.getFullName() : joinData.guestName || "Guest",
-        guestName: !user ? joinData.guestName : undefined,
+        guestName: !user ? joinData.guestName : user.getFullName(),
         avatar: user?.avatar,
         role,
         permissions: this.getDefaultPermissions(role),
@@ -270,6 +270,7 @@ export class MeetingService {
         ipAddress: joinData.deviceInfo?.ipAddress,
         userAgent: joinData.deviceInfo?.userAgent,
       });
+      console.log("Participant joining: ", participant)
 
       await participant.save();
 
