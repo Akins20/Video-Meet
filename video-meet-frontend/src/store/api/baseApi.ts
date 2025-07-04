@@ -4,7 +4,7 @@ import { logout, refreshTokenSuccess, refreshTokenFailure } from '../authSlice'
 import { toast } from 'react-hot-toast'
 
 // API base URL from environment
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://super-duper-spork-9rv6rj564jr395w6-5000.app.github.dev/api/v1'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://video-meet-g90z.onrender.com/api/v1'
 
 // Enhanced base query with authentication and token refresh
 const baseQuery = fetchBaseQuery({

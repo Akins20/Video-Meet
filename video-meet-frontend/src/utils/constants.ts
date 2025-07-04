@@ -18,8 +18,8 @@ export const ENV_CONFIG = {
     isTest: process.env.NODE_ENV === 'test',
 
     // API URLs
-    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://super-duper-spork-9rv6rj564jr395w6-5000.app.github.dev/api/v1',
-    wsUrl: process.env.NEXT_PUBLIC_WS_URL || 'ws://super-duper-spork-9rv6rj564jr395w6-5000.app.github.dev',
+    apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://video-meet-g90z.onrender.com/api/v1',
+        wsUrl: process.env.NEXT_PUBLIC_WS_URL || 'ws://video-meet-g90z.onrender.com',
 
     // External services
     turnServer: process.env.NEXT_PUBLIC_TURN_SERVER || 'turn:localhost:3478',

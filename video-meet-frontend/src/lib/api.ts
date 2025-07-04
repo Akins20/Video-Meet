@@ -23,19 +23,21 @@ class ApiClient {
     private failedQueue: QueuedRequest[] = []
 
     constructor() {
-        // Create axios instance with CORS-friendly configuration
+        // Create axios instance with Render-compatible configuration
         this.client = axios.create({
             baseURL: ENV_CONFIG.apiUrl,
             timeout: TIME_CONFIG.timeouts.apiRequest,
             
-            // 🔥 CORS-friendly headers - only include essential ones
+            // 🔥 Render-compatible headers
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
+                // Add origin header for CORS
+                'Origin': typeof window !== 'undefined' ? window.location.origin : undefined,
             },
             
-            // 🔥 Enable credentials for CORS
-            withCredentials: true,
+            // 🔥 CORS configuration for Render
+            withCredentials: false, // Disable for Render CORS
             
             // Enable automatic request/response compression
             decompress: true,
@@ -44,64 +46,65 @@ class ApiClient {
             maxContentLength: 100 * 1024 * 1024,
             maxBodyLength: 100 * 1024 * 1024,
             
-            // 🔥 Disable automatic JSON parsing for better error handling
-            validateStatus: (status) => status < 500, // Don't throw on 4xx errors
+            // Don't throw on 4xx errors
+            validateStatus: (status) => status < 500,
         })
 
         this.setupInterceptors()
     }
 
     private setupInterceptors() {
-        // Request interceptor - Add auth token and minimal headers
+        // Request interceptor
         this.client.interceptors.request.use(
             (config: InternalAxiosRequestConfig) => {
-                // 🔥 Only add custom headers if absolutely necessary
-                // Removed X-Request-ID to avoid CORS preflight issues
-                
-                // Add timestamp for performance monitoring (commented out to avoid CORS issues)
-                // config.metadata = { startTime: Date.now() }
-
                 // Add auth token if available
                 const token = this.getAccessToken()
                 if (token) {
                     config.headers.Authorization = `Bearer ${token}`
                 }
                 
-                // 🔥 Ensure proper Content-Type for different request types
+                // Ensure proper Content-Type
                 if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
                     config.headers['Content-Type'] = 'application/json'
                 }
 
-                // Log request in development
-                if (ENV_CONFIG.isDevelopment) {
-                    console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-                        headers: config.headers,
-                        data: config.data,
-                    })
-                }
+                // Always log requests for debugging
+                console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+                    baseURL: config.baseURL,
+                    headers: config.headers,
+                    data: config.data,
+                })
 
                 return config
             },
             (error) => {
+                console.error('Request interceptor error:', error)
                 return Promise.reject(this.handleRequestError(error))
             }
         )
 
-        // Response interceptor - Handle auth and errors
+        // Response interceptor
         this.client.interceptors.response.use(
             (response: AxiosResponse) => {
-                // Log response in development
-                if (ENV_CONFIG.isDevelopment) {
-                    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-                        status: response.status,
-                        data: response.data,
-                    })
-                }
+                // Always log responses for debugging
+                console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: response.data,
+                })
 
-                // Transform response data
                 return this.transformSuccessResponse(response)
             },
             async (error: AxiosError) => {
+                // Always log errors for debugging
+                console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+                    status: error.response?.status,
+                    statusText: error.response?.statusText,
+                    data: error.response?.data,
+                    message: error.message,
+                    code: error.code,
+                })
+
                 return this.handleResponseError(error)
             }
         )
@@ -117,19 +120,9 @@ class ApiClient {
             throw networkError
         }
 
-        // Log error in development
-        if (ENV_CONFIG.isDevelopment) {
-            console.error(`❌ API Error: ${originalRequest.method?.toUpperCase()} ${originalRequest.url}`, {
-                status: error.response.status,
-                data: error.response.data,
-                error: error.message,
-            })
-        }
-
         // Handle 401 - Token expired
         if (error.response.status === 401 && !originalRequest._retry) {
             if (this.isRefreshing) {
-                // Queue the request while token is being refreshed
                 return new Promise((resolve, reject) => {
                     this.failedQueue.push({ resolve, reject, config: originalRequest })
                 })
@@ -152,7 +145,7 @@ class ApiClient {
         // Handle other status codes
         const apiError = this.transformErrorResponse(error)
 
-        // Don't show toast for validation errors (handled by forms)
+        // Don't show toast for validation errors
         if (error.response.status !== 422) {
             this.showErrorToast(apiError.message)
         }
@@ -167,7 +160,6 @@ class ApiClient {
                 throw new Error('No refresh token available')
             }
 
-            // 🔥 Use the same client instance for token refresh to inherit CORS settings
             const response = await this.client.post('/auth/refresh-token', {
                 refreshToken,
             })
@@ -175,8 +167,6 @@ class ApiClient {
             if (response.data.success) {
                 const { accessToken, expiresIn } = response.data.data
                 this.storeTokens(accessToken, refreshToken, expiresIn)
-
-                // Dispatch success action to Redux store
                 this.dispatchTokenRefreshSuccess(accessToken, expiresIn)
             } else {
                 throw new Error('Token refresh failed')
@@ -198,7 +188,6 @@ class ApiClient {
                 resolve(this.client(config))
             }
         })
-
         this.failedQueue = []
     }
 
@@ -211,11 +200,17 @@ class ApiClient {
     }
 
     private createNetworkError(error: AxiosError): NetworkError {
-        // 🔥 Enhanced CORS error detection
+        console.error('Network error details:', {
+            message: error.message,
+            code: error.code,
+            stack: error.stack,
+        })
+
+        // Enhanced error detection
         if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
             return {
                 type: 'CORS_ERROR',
-                message: 'Cross-origin request blocked. Please check server configuration.',
+                message: 'CORS error: Server not allowing requests from this origin.',
                 originalError: error,
             }
         }
@@ -228,10 +223,18 @@ class ApiClient {
             }
         }
 
-        if (error.message === 'Network Error') {
+        if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
             return {
                 type: 'NETWORK_ERROR',
-                message: ERROR_MESSAGES.network.offline,
+                message: 'Network error: Unable to connect to server.',
+                originalError: error,
+            }
+        }
+
+        if (error.message.includes('ERR_FAILED')) {
+            return {
+                type: 'FETCH_ERROR',
+                message: 'Connection failed: Server may be down or blocking requests.',
                 originalError: error,
             }
         }
@@ -244,13 +247,11 @@ class ApiClient {
     }
 
     private transformSuccessResponse(response: AxiosResponse): AxiosResponse {
-        // 🔥 Simplified response transformation to avoid CORS issues
         response.data._meta = {
             status: response.status,
             statusText: response.statusText,
             timestamp: new Date().toISOString(),
         }
-
         return response
     }
 
@@ -266,7 +267,6 @@ class ApiClient {
                 details: data?.error?.details || data,
             },
             timestamp: new Date().toISOString(),
-            // Removed requestId to avoid CORS issues
         }
     }
 
@@ -296,7 +296,6 @@ class ApiClient {
     }
 
     private showErrorToast(message: string) {
-        // Debounce error toasts to prevent spam
         if (!this.lastErrorToast || Date.now() - this.lastErrorToast > 3000) {
             toast.error(message)
             this.lastErrorToast = Date.now()
@@ -306,39 +305,32 @@ class ApiClient {
     private lastErrorToast = 0
 
     private getAccessToken(): string | null {
-        // This will be replaced with Redux store access
         return localStorage.getItem('accessToken')
     }
 
     private getRefreshToken(): string | null {
-        // This will be replaced with Redux store access
         return localStorage.getItem('refreshToken')
     }
 
     private storeTokens(accessToken: string, refreshToken: string, expiresIn: number) {
-        // This will be replaced with Redux store dispatch
         localStorage.setItem('accessToken', accessToken)
         localStorage.setItem('refreshToken', refreshToken)
         localStorage.setItem('tokenExpiresAt', (Date.now() + expiresIn * 1000).toString())
     }
 
     private dispatchTokenRefreshSuccess(accessToken: string, expiresIn: number) {
-        // This will dispatch to Redux store
         console.log('Token refreshed successfully')
     }
 
     private dispatchTokenRefreshFailure() {
-        // This will dispatch to Redux store
         console.log('Token refresh failed - logging out user')
     }
 
     private handleAuthFailure() {
-        // Clear tokens and redirect to login
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
         localStorage.removeItem('tokenExpiresAt')
 
-        // This will be replaced with Redux logout action
         if (typeof window !== 'undefined') {
             window.location.href = '/login'
         }
@@ -370,7 +362,6 @@ class ApiClient {
         return response.data
     }
 
-    // 🔥 Fixed file upload method with proper CORS handling
     public async uploadFile<T = any>(
         url: string,
         file: File,
@@ -380,11 +371,8 @@ class ApiClient {
         formData.append('file', file)
 
         const config: AxiosRequestConfig = {
-            // 🔥 Don't set Content-Type header - let browser set it automatically
-            // This is crucial for multipart/form-data CORS requests
             headers: {
-                // Remove Content-Type header to avoid CORS issues
-                // Browser will set it automatically with boundary
+                // Let browser set Content-Type automatically
             },
             onUploadProgress: (progressEvent) => {
                 if (onProgress && progressEvent.total) {
@@ -398,13 +386,11 @@ class ApiClient {
         return response.data
     }
 
-    // Download file method
     public async downloadFile(url: string, filename?: string): Promise<void> {
         const response = await this.client.get(url, {
             responseType: 'blob',
         })
 
-        // Create blob URL and trigger download
         const blob = new Blob([response.data])
         const downloadUrl = window.URL.createObjectURL(blob)
 
@@ -415,57 +401,59 @@ class ApiClient {
         link.click()
         document.body.removeChild(link)
 
-        // Clean up blob URL
         window.URL.revokeObjectURL(downloadUrl)
     }
 
-    // Health check method
     public async healthCheck(): Promise<boolean> {
         try {
-            await this.client.get('/health', { timeout: 5000 })
-            return true
-        } catch {
+            const response = await this.client.get('/health', { timeout: 10000 })
+            return response.status === 200
+        } catch (error) {
+            console.error('Health check failed:', error)
             return false
         }
     }
 
-    // Cancel all pending requests
     public cancelAllRequests() {
-        // Clear the failed queue
         this.failedQueue.forEach(({ reject }) => {
             reject(new Error('Request cancelled'))
         })
         this.failedQueue = []
     }
 
-    // Get client instance for advanced usage
     public getClient(): AxiosInstance {
         return this.client
     }
 
-    // 🔥 Method to test CORS connectivity
+    // Enhanced CORS testing
     public async testCors(): Promise<boolean> {
         try {
-            console.log('🔍 Testing CORS connectivity...')
-            const response = await this.client.get('/health', { 
-                timeout: 10000,
+            console.log('🔍 Testing CORS connectivity to:', ENV_CONFIG.apiUrl)
+            
+            // Test with fetch first (simpler)
+            const healthUrl = `${ENV_CONFIG.apiUrl.replace('/api/v1', '')}/health`
+            const fetchResponse = await fetch(healthUrl, {
+                method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                    'Accept': 'application/json',
+                },
+                mode: 'cors',
             })
-            console.log('✅ CORS test successful:', response.status)
-            return true
+            
+            if (fetchResponse.ok) {
+                console.log('✅ Fetch CORS test successful:', fetchResponse.status)
+                
+                // Now test with axios
+                const axiosResponse = await this.client.get('/health', { timeout: 10000 })
+                console.log('✅ Axios CORS test successful:', axiosResponse.status)
+                return true
+            } else {
+                console.log('❌ Fetch CORS test failed:', fetchResponse.status)
+                return false
+            }
         } catch (error) {
             console.error('❌ CORS test failed:', error)
-            if (error instanceof AxiosError) {
-                console.error('Error details:', {
-                    message: error.message,
-                    code: error.code,
-                    response: error.response?.data,
-                    status: error.response?.status
-                })
-            }
             return false
         }
     }
@@ -490,159 +478,53 @@ export const api = {
     testCors: apiClient.testCors.bind(apiClient),
 }
 
-// Utility functions for common API patterns
+// Debug utilities
 export const apiUtils = {
-    /**
-     * Create URL with query parameters
-     */
     createUrl: (baseUrl: string, params?: Record<string, any>): string => {
         if (!params) return baseUrl
-
         const searchParams = new URLSearchParams()
         Object.entries(params).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
                 searchParams.append(key, String(value))
             }
         })
-
         return `${baseUrl}?${searchParams.toString()}`
     },
 
-    /**
-     * Retry failed requests
-     */
-    retry: async <T>(
-        requestFn: () => Promise<T>,
-        options: {
-            maxAttempts?: number
-            delay?: number
-            backoff?: number
-        } = {}
-    ): Promise<T> => {
-        const { maxAttempts = 3, delay = 1000, backoff = 2 } = options
-
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                return await requestFn()
-            } catch (error) {
-                if (attempt === maxAttempts) {
-                    throw error
-                }
-
-                // Don't retry auth errors
-                if (errorUtils.isAuthError(error)) {
-                    throw error
-                }
-
-                // Don't retry CORS errors
-                if (typeof error === 'object' && error !== null && 'type' in error && (error as any).type === 'CORS_ERROR') {
-                    throw error
-                }
-
-                // Wait before retry with exponential backoff
-                await new Promise(resolve =>
-                    setTimeout(resolve, delay * Math.pow(backoff, attempt - 1))
-                )
-            }
-        }
-
-        throw new Error('Max retry attempts exceeded')
-    },
-
-    /**
-     * Batch requests with concurrency control
-     */
-    batch: async <T>(
-        requests: Array<() => Promise<T>>,
-        concurrency = 5
-    ): Promise<T[]> => {
-        const results: T[] = []
-
-        for (let i = 0; i < requests.length; i += concurrency) {
-            const batch = requests.slice(i, i + concurrency)
-            const batchResults = await Promise.all(batch.map(req => req()))
-            results.push(...batchResults)
-        }
-
-        return results
-    },
-
-    /**
-     * Check if error is retryable
-     */
-    isRetryableError: (error: any): boolean => {
-        if (errorUtils.isAuthError(error)) return false
-        if (error.type === 'CORS_ERROR') return false
-        if (errorUtils.isNetworkError(error)) return true
-
-        // Check HTTP status codes
-        if (error.response?.status) {
-            const status = error.response.status
-            return status >= 500 || status === 408 || status === 429
-        }
-
-        return false
-    },
-
-    /**
-     * 🔥 CORS debugging helper
-     */
     debugCors: async (): Promise<void> => {
-        console.log('🔍 CORS Debug Information:')
+        console.group('🔍 CORS Debug Information')
         console.log('API Base URL:', ENV_CONFIG.apiUrl)
         console.log('Current Origin:', window.location.origin)
+        console.log('Current URL:', window.location.href)
         console.log('User Agent:', navigator.userAgent)
         
         // Test basic connectivity
         const corsTest = await api.testCors()
         console.log('CORS Test Result:', corsTest ? '✅ PASS' : '❌ FAIL')
         
-        // Test different request types
-        const tests = [
-            { method: 'GET', url: '/health', description: 'Simple GET request' },
-            { method: 'POST', url: '/auth/login', description: 'POST request with JSON' },
-            { method: 'OPTIONS', url: '/health', description: 'Preflight OPTIONS request' },
-        ]
-        
-        for (const test of tests) {
-            try {
-                console.log(`Testing ${test.description}...`)
-                if (test.method === 'OPTIONS') {
-                    // Test OPTIONS request directly
-                    await fetch(`${ENV_CONFIG.apiUrl}${test.url}`, {
-                        method: 'OPTIONS',
-                        headers: {
-                            'Access-Control-Request-Method': 'GET',
-                            'Access-Control-Request-Headers': 'authorization,content-type',
-                        }
-                    })
-                } else {
-                    await apiClient.getClient().request({
-                        method: test.method.toLowerCase(),
-                        url: test.url,
-                        timeout: 5000,
-                    })
-                }
-                console.log(`✅ ${test.description} - SUCCESS`)
-            } catch (error) {
-                console.log(`❌ ${test.description} - FAILED:`, error)
-            }
+        // Test OPTIONS request
+        try {
+            const optionsResponse = await fetch(`${ENV_CONFIG.apiUrl.replace('/api/v1', '')}/health`, {
+                method: 'OPTIONS',
+                headers: {
+                    'Access-Control-Request-Method': 'GET',
+                    'Access-Control-Request-Headers': 'content-type,authorization',
+                },
+                mode: 'cors',
+            })
+            console.log('OPTIONS preflight test:', optionsResponse.status)
+        } catch (error) {
+            console.log('OPTIONS preflight failed:', error)
         }
+        
+        console.groupEnd()
+    },
+
+    isRetryableError: (error: any): boolean => {
+        if (error.response?.status) {
+            const status = error.response.status
+            return status >= 500 || status === 408 || status === 429
+        }
+        return false
     }
-}
-
-// Request interceptor for adding custom headers
-export const addRequestInterceptor = (
-    onFulfilled?: (config: InternalAxiosRequestConfig) => InternalAxiosRequestConfig,
-    onRejected?: (error: any) => any
-) => {
-    return apiClient.getClient().interceptors.request.use(onFulfilled, onRejected)
-}
-
-// Response interceptor for custom handling
-export const addResponseInterceptor = (
-    onFulfilled?: (response: AxiosResponse) => AxiosResponse,
-    onRejected?: (error: any) => any
-) => {
-    return apiClient.getClient().interceptors.response.use(onFulfilled, onRejected)
 }

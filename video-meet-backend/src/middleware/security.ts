@@ -254,7 +254,7 @@ export const corsMiddleware = cors({
   // origin: "*"
   // But "true" is more permissive and handles all cases
   
-  credentials: true, // Allow cookies and authorization headers
+  // credentials: false, // Allow cookies and authorization headers
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
   allowedHeaders: [
     "Origin",

@@ -99,11 +99,15 @@ export const useAuth = () => {
                     rememberMe: credentials.rememberMe || false
                 }))
 
-                // Show success message
-                toast.success(`Welcome back, ${user.firstName}!`)
+                if (user) {
+                    // Show success message
+                    toast.success(`Welcome back, ${user.firstName}!`)
 
-                // Redirect to dashboard
-                router.push('/dashboard')
+                    // Redirect to dashboard
+                    router.push('/dashboard')
+                }
+
+
 
                 return { success: true, user }
             } else {
