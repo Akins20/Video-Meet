@@ -252,7 +252,7 @@ export class MeetingService {
         meetingId: meeting._id,
         userId: user?._id,
         displayName: user ? user.getFullName() : joinData.guestName || "Guest",
-        guestName: !user ? joinData.guestName : user.getFullName(),
+        guestName: user ? user.getFullName() : joinData.guestName || "Guest",
         avatar: user?.avatar,
         role,
         permissions: this.getDefaultPermissions(role),
