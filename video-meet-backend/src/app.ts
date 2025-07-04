@@ -186,7 +186,7 @@ class VideoMeetApp {
         }
 
         // Verify JWT token
-        const AuthService = (await import("@/services/AuthService")).default;
+        const AuthService = (await import("./services/AuthService")).default;
         const decoded = await AuthService.verifyAccessToken(token);
 
         if (!decoded) {
@@ -222,7 +222,7 @@ class VideoMeetApp {
 
           // Validate meeting participation
           const ParticipantService = (
-            await import("@/services/ParticipantService")
+            await import("./services/ParticipantService")
           ).default;
           const result = await ParticipantService.getParticipant(participantId);
 
@@ -394,12 +394,12 @@ class VideoMeetApp {
             });
 
             // Close database connection
-            const { disconnectDatabase } = await import("@/config/database");
+            const { disconnectDatabase } = await import("./config/database");
             await disconnectDatabase();
             console.log("🗄️  Database connection closed");
 
             // Cleanup error monitor
-            const { errorMonitor } = await import("@/middleware/errorHandler");
+            const { errorMonitor } = await import("./middleware/errorHandler");
             errorMonitor.cleanup();
             console.log("📊 Error monitor cleaned up");
 

@@ -63,7 +63,7 @@ router.get(
   generalRateLimit,
   asyncHandler(async (req, res) => {
     // Check database connection
-    const { checkDatabaseHealth } = await import("@/config/database");
+    const { checkDatabaseHealth } = await import("../config/database");
     const dbHealth = await checkDatabaseHealth();
 
     // Calculate uptime
@@ -133,14 +133,14 @@ router.get(
   generalRateLimit,
   asyncHandler(async (req, res) => {
     // Get error monitoring stats
-    const { errorMonitor } = await import("@/middleware/errorHandler");
+    const { errorMonitor } = await import("../middleware/errorHandler");
     const errorCounts = errorMonitor.getErrorCounts();
     const errorRate = errorMonitor.getErrorRate();
 
     // Get basic statistics
-    const { User } = await import("@/models/User");
-    const { Meeting } = await import("@/models/Meeting");
-    const { Participant } = await import("@/models/Participant");
+    const { User } = await import("../models/User");
+    const { Meeting } = await import("../models/Meeting");
+    const { Participant } = await import("../models/Participant");
 
     const [
       totalUsers,

@@ -187,7 +187,7 @@ export const requireMeetingHost = async (
     }
 
     // Check if user is the host of the meeting
-    const { Meeting } = await import("@/models/Meeting");
+    const { Meeting } = await import("../models/Meeting");
     const meeting = await Meeting.findOne({
       _id: meetingId,
       hostId: req.userId,
@@ -253,7 +253,7 @@ export const requireMeetingParticipant = async (
         return;
       }
 
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
       const participant = await Participant.findOne({
         _id: participantId,
         meetingId: meetingId,
@@ -274,7 +274,7 @@ export const requireMeetingParticipant = async (
     }
 
     // For authenticated users, check participant record
-    const { Participant } = await import("@/models/Participant");
+    const { Participant } = await import("../models/Participant");
     const participant = await Participant.findOne({
       meetingId: meetingId,
       userId: req.userId,

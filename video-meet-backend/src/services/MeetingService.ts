@@ -66,7 +66,7 @@ export class MeetingService {
   ): Promise<APIResponse<IMeeting>> {
     try {
       // Import Meeting model dynamically to avoid circular dependencies
-      const { Meeting } = await import("@/models/Meeting");
+      const { Meeting } = await import("../models/Meeting");
 
       // Generate unique room ID
       const roomId = this.generateRoomId();
@@ -154,9 +154,9 @@ export class MeetingService {
     }>
   > {
     try {
-      const { Meeting } = await import("@/models/Meeting");
-      const { Participant } = await import("@/models/Participant");
-      const { User } = await import("@/models/User");
+      const { Meeting } = await import("../models/Meeting");
+      const { Participant } = await import("../models/Participant");
+      const { User } = await import("../models/User");
 
       // Find meeting
       const meeting = await Meeting.findOne({
@@ -309,8 +309,8 @@ export class MeetingService {
     participantId: string
   ): Promise<APIResponse> {
     try {
-      const { Meeting } = await import("@/models/Meeting");
-      const { Participant } = await import("@/models/Participant");
+      const { Meeting } = await import("../models/Meeting");
+      const { Participant } = await import("../models/Participant");
 
       // Find participant
       const participant = await Participant.findById(participantId);
@@ -373,8 +373,8 @@ export class MeetingService {
     hostId: string
   ): Promise<APIResponse> {
     try {
-      const { Meeting } = await import("@/models/Meeting");
-      const { Participant } = await import("@/models/Participant");
+      const { Meeting } = await import("../models/Meeting");
+      const { Participant } = await import("../models/Participant");
 
       // Find meeting and verify host
       const meeting = await Meeting.findOne({
@@ -440,7 +440,7 @@ export class MeetingService {
     updateData: UpdateMeetingData
   ): Promise<APIResponse<IMeeting>> {
     try {
-      const { Meeting } = await import("@/models/Meeting");
+      const { Meeting } = await import("../models/Meeting");
 
       // Find meeting and verify host
       const meeting = await Meeting.findOne({
@@ -492,7 +492,7 @@ export class MeetingService {
    */
   static async getMeeting(roomId: string): Promise<APIResponse<IMeeting>> {
     try {
-      const { Meeting } = await import("@/models/Meeting");
+      const { Meeting } = await import("../models/Meeting");
 
       const meeting = await Meeting.findOne({ roomId })
         .populate("hostId", "firstName lastName username avatar")
@@ -530,7 +530,7 @@ export class MeetingService {
     limit: number = 10
   ): Promise<APIResponse<IMeeting[]>> {
     try {
-      const { Meeting } = await import("@/models/Meeting");
+      const { Meeting } = await import("../models/Meeting");
 
       const skip = (page - 1) * limit;
 

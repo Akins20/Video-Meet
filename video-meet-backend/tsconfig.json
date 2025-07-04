@@ -47,9 +47,7 @@
     
     /* Path Mapping for Clean Imports */
     "baseUrl": "./src",
-    "paths": {
-      "@/*": ["*"],
-    },
+    
     
     /* Advanced */
     "resolveJsonModule": true,

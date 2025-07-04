@@ -447,7 +447,7 @@ export class AuthController {
       }
 
       // Find user by verification token
-      const User = (await import("@/models/User")).default;
+      const User = (await import("../models/User")).default;
       const user = await User.findOne({
         emailVerificationToken: token,
         isActive: true,
@@ -563,7 +563,7 @@ export class AuthController {
         throw createError.validation("Email or username is required");
       }
 
-      const User = (await import("@/models/User")).default;
+      const User = (await import("../models/User")).default;
       const checks: { email?: boolean; username?: boolean } = {};
 
       // Check email availability

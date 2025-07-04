@@ -70,7 +70,7 @@ export class ParticipantService {
     meetingId: string
   ): Promise<APIResponse<IParticipant[]>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       const participants = await Participant.find({
         meetingId: new Types.ObjectId(meetingId),
@@ -101,7 +101,7 @@ export class ParticipantService {
     participantId: string
   ): Promise<APIResponse<IParticipant>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       const participant = await Participant.findById(participantId)
         .populate("userId", "firstName lastName username avatar")
@@ -138,7 +138,7 @@ export class ParticipantService {
     mediaData: UpdateMediaStateData
   ): Promise<APIResponse<IParticipant>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       const participant = await Participant.findById(participantId);
 
@@ -186,7 +186,7 @@ export class ParticipantService {
     qualityData: ConnectionQualityData
   ): Promise<APIResponse<IParticipant>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       const participant = await Participant.findById(participantId);
 
@@ -241,8 +241,8 @@ export class ParticipantService {
     roleData: ChangeRoleData
   ): Promise<APIResponse<IParticipant>> {
     try {
-      const { Participant } = await import("@/models/Participant");
-      const { Meeting } = await import("@/models/Meeting");
+      const { Participant } = await import("../models/Participant");
+      const { Meeting } = await import("../models/Meeting");
 
       // Verify requester has permission
       const requester = await Participant.findOne({
@@ -330,7 +330,7 @@ export class ParticipantService {
     permissionData: UpdatePermissionsData
   ): Promise<APIResponse<IParticipant>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       // Verify requester has permission
       const requester = await Participant.findOne({
@@ -386,8 +386,8 @@ export class ParticipantService {
     removeData: RemoveParticipantData
   ): Promise<APIResponse> {
     try {
-      const { Participant } = await import("@/models/Participant");
-      const { Meeting } = await import("@/models/Meeting");
+      const { Participant } = await import("../models/Participant");
+      const { Meeting } = await import("../models/Meeting");
 
       // Verify requester has permission
       const requester = await Participant.findOne({
@@ -465,7 +465,7 @@ export class ParticipantService {
     muteData: MuteParticipantData
   ): Promise<APIResponse<IParticipant>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       // Verify requester has permission
       const requester = await Participant.findOne({
@@ -525,7 +525,7 @@ export class ParticipantService {
     socketId: string
   ): Promise<APIResponse<IParticipant>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       const participant = await Participant.findByIdAndUpdate(
         participantId,
@@ -565,7 +565,7 @@ export class ParticipantService {
     limit: number = 10
   ): Promise<APIResponse<IParticipant[]>> {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       const skip = (page - 1) * limit;
 
@@ -707,7 +707,7 @@ export class ParticipantService {
     }>
   > {
     try {
-      const { Participant } = await import("@/models/Participant");
+      const { Participant } = await import("../models/Participant");
 
       const participants = await Participant.find({
         meetingId: new Types.ObjectId(meetingId),

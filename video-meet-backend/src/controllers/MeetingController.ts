@@ -641,7 +641,7 @@ export class MeetingController {
       }
 
       // Import Meeting model
-      const { Meeting } = await import("@/models/Meeting");
+      const { Meeting } = await import("../models/Meeting");
 
       // Search for public meetings
       const skip = (Number(page) - 1) * Number(limit);
