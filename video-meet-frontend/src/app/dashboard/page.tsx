@@ -115,7 +115,7 @@ export default function DashboardPage() {
         { 
             icon: Users, 
             label: "Total Participants", 
-            value: totalParticipants, 
+            value: totalParticipants || "0", 
             color: "from-blue-500 to-cyan-500" 
         },
         { 

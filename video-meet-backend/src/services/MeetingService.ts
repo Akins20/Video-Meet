@@ -580,6 +580,7 @@ export class MeetingService {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
       }
     }
+    console.log("Generated room ID:", result);
 
     return result;
   }

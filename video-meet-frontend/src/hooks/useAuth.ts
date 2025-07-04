@@ -42,6 +42,8 @@ interface RegisterData {
 }
 
 interface AuthResponse {
+    success: boolean
+    message: string
     user: User
     accessToken: string
     refreshToken: string
@@ -79,20 +81,18 @@ export const useAuth = () => {
         try {
             dispatch(loginStart())
 
-            const response = await apiClient.post<{ success: boolean; data: AuthResponse }>(
+            const response = await apiClient.post<AuthResponse>(
                 '/auth/login',
                 {
                     emailOrUsername: credentials.emailOrUsername,
                     password: credentials.password
                 }
             )
+            console.log('Login response:', response.data)
 
-            if (response.data.success) {
-                const { user, accessToken, refreshToken, expiresIn } = response.data.data
-                console.log('Login response:', response.data)
+            if (response.success) {
+                const { user, accessToken, refreshToken, expiresIn } = response.data
                 console.log('Login successful:', user)
-
-
 
                 // Update Redux store (this will handle persistence automatically)
                 dispatch(loginSuccess({
@@ -110,8 +110,6 @@ export const useAuth = () => {
                     // Redirect to dashboard
                     router.push('/dashboard')
                 }
-
-
 
                 return { success: true, user }
             } else {
@@ -132,7 +130,7 @@ export const useAuth = () => {
         try {
             dispatch(registerStart())
 
-            const response = await apiClient.post<{ success: boolean; data: AuthResponse }>(
+            const response = await apiClient.post<AuthResponse>(
                 '/auth/register',
                 {
                     email: userData.email,
@@ -143,8 +141,8 @@ export const useAuth = () => {
                 }
             )
 
-            if (response.data.success) {
-                const { user, accessToken, refreshToken, expiresIn } = response.data.data
+            if (response.success) {
+                const { user, accessToken, refreshToken, expiresIn } = response.data
 
                 // Update Redux store
                 dispatch(loginSuccess({
@@ -166,7 +164,7 @@ export const useAuth = () => {
                 throw new Error('Registration failed')
             }
         } catch (error: any) {
-            const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.'
+            const errorMessage = error.response?.message || 'Registration failed. Please try again.'
             dispatch(loginFailure(errorMessage))
             toast.error(errorMessage)
             return { success: false, error: errorMessage }
@@ -214,13 +212,14 @@ export const useAuth = () => {
 
             const response = await apiClient.post<{
                 success: boolean
-                data: { accessToken: string; expiresIn: number }
+                accessToken: string
+                expiresIn: number
             }>('/auth/refresh-token', {
                 refreshToken: authState.refreshToken
             })
 
-            if (response.data.success) {
-                const { accessToken, expiresIn } = response.data.data
+            if (response.success) {
+                const { accessToken, expiresIn } = response.data
 
                 // Update Redux store
                 dispatch(refreshTokenSuccess({ accessToken, expiresIn }))
@@ -247,20 +246,20 @@ export const useAuth = () => {
         try {
             const response = await apiClient.put<{
                 success: boolean
-                data: { user: User }
+                user: User
             }>('/auth/profile', profileData)
 
-            if (response.data.success) {
+            if (response.success) {
                 // Update Redux store
-                dispatch(updateProfile(response.data.data.user))
+                dispatch(updateProfile(response.data.user))
 
                 toast.success('Profile updated successfully')
-                return { success: true, user: response.data.data.user }
+                return { success: true, user: response.data.user }
             } else {
                 throw new Error('Profile update failed')
             }
         } catch (error: any) {
-            const errorMessage = error.response?.data?.message || 'Profile update failed'
+            const errorMessage = error.response?.message || 'Profile update failed'
             toast.error(errorMessage)
             return { success: false, error: errorMessage }
         }
