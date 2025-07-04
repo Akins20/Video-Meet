@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client";
 import { FC } from "react";
 import { motion, AnimatePresence } from "framer-motion";

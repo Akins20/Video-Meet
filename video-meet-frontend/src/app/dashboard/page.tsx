@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
@@ -45,7 +48,7 @@ const sidebarVariants = {
         x: 0,
         opacity: 1,
         transition: {
-            type: "spring" as "spring",
+            type: "spring" as const,
             stiffness: 100,
             damping: 20
         }

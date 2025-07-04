@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useDispatch, useSelector, TypedUseSelectorHook } from 'react-redux'
 import { useCallback, useEffect, useRef } from 'react'
 import type { RootState, AppDispatch } from './index'

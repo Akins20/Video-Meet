@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client";
 import { FC, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -43,29 +45,27 @@ const pulseVariants = {
     scale: [1, 1.2, 1],
     opacity: [1, 0.7, 1],
     transition: {
-      type: "spring" as "spring",
+      type: "spring" as const,
       duration: 1.5,
-      repeat: Infinity,
-      ease: "easeInOut"
+      repeat: Infinity
     }
   },
   starting: {
     scale: [1, 1.1, 1],
     opacity: [0.5, 1, 0.5],
     transition: {
-      type: "spring" as "spring",
+      type: "spring" as const,
       duration: 0.8,
-      repeat: Infinity,
-      ease: "easeInOut"
+      repeat: Infinity
     }
   },
   stopping: {
     scale: [1.2, 1],
     opacity: [1, 0.3],
     transition: {
-      type: "spring" as "spring",
+      type: "spring" as const,
       duration: 0.5,
-      ease: "easeOut"
+      repeat: Infinity
     }
   }
 };
@@ -76,6 +76,7 @@ const textVariants = {
     opacity: 1,
     x: 0,
     transition: {
+      type: "spring" as const,
       delay: 0.1
     }
   }

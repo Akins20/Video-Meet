@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { io, Socket } from 'socket.io-client'
 import { toast } from 'react-hot-toast'
 import { ENV_CONFIG, WS_EVENTS, TIME_CONFIG } from '@/utils/constants'

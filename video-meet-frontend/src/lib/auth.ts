@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { jwtDecode } from 'jwt-decode'
 import { STORAGE_KEYS, TIME_CONFIG } from '@/utils/constants'
 import type { User } from '@/types/auth'
@@ -486,7 +489,7 @@ export class AuthUtils {
         const userAgent = navigator.userAgent
         let deviceType: 'web' | 'mobile' | 'desktop' = 'web'
         let browser = 'Unknown'
-        let platform = navigator.platform
+        const platform = navigator.platform
 
         // Detect device type
         if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent)) {

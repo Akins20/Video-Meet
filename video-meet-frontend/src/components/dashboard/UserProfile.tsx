@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import { FC, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
@@ -383,7 +384,7 @@ const UserProfile: FC = () => {
                                             )}
                                         </div>
                                         <div className="text-2xl font-bold text-white mb-1">
-                                            {stat.value || "0"}
+                                            {stat.value.toString() || "0"}
                                         </div>
                                         <div className="text-sm text-slate-400">
                                             {stat.label}

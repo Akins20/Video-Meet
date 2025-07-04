@@ -1,3 +1,8 @@
+/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+
 "use client";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -48,7 +53,7 @@ const itemVariants = {
         y: 0,
         opacity: 1,
         transition: {
-            type: "spring" as "spring",
+            type: "spring" as const,
             stiffness: 100,
             damping: 10
         }

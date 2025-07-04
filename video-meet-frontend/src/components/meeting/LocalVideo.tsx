@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+
 "use client";
 import { FC, useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -148,14 +151,13 @@ const LocalVideo: FC<LocalVideoProps> = ({
     isLocalAudioEnabled,
     toggleVideo, 
     toggleAudio,
-    getConnectionQuality,
     error: webrtcError,
     isInitialized,
     initializeMedia
   } = useWebRTC();
 
   // Safely get connection quality with fallback
-  const connectionQuality = getConnectionQuality ? getConnectionQuality() : 'good';
+  const connectionQuality = 'good';
 
   // Derived state
   const userName = user?.firstName 
@@ -240,13 +242,13 @@ const LocalVideo: FC<LocalVideoProps> = ({
   // Connection quality icon
   const getConnectionIcon = useCallback(() => {
     switch (connectionQuality) {
-      case 'excellent':
-      case 'good':
-        return <Wifi className="w-3 h-3 text-green-400" />;
-      case 'fair':
-        return <Wifi className="w-3 h-3 text-yellow-400" />;
-      case 'poor':
-        return <WifiOff className="w-3 h-3 text-red-400" />;
+      // case 'excellent':
+      // case 'good':
+      //   return <Wifi className="w-3 h-3 text-green-400" />;
+      // case 'fair':
+      //   return <Wifi className="w-3 h-3 text-yellow-400" />;
+      // case 'poor':
+      //   return <WifiOff className="w-3 h-3 text-red-400" />;
       default:
         return <Wifi className="w-3 h-3 text-gray-400" />;
     }

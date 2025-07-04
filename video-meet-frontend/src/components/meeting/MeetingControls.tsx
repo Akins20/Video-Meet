@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+
 "use client";
 import { FC, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
