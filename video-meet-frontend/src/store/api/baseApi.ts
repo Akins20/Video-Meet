@@ -3,10 +3,10 @@ import { RootState } from '../index'
 import { logout, refreshTokenSuccess, refreshTokenFailure } from '../authSlice'
 import { toast } from 'react-hot-toast'
 
-// API base URL from environment
+// API base URL from environment with fallback
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://video-meet-g90z.onrender.com/api/v1'
 
-// Enhanced base query with authentication and token refresh
+// Enhanced base query with authentication and CORS handling
 const baseQuery = fetchBaseQuery({
     baseUrl: API_BASE_URL,
     prepareHeaders: (headers, { getState }) => {
@@ -17,18 +17,45 @@ const baseQuery = fetchBaseQuery({
             headers.set('authorization', `Bearer ${token}`)
         }
 
-        // Add common headers
+        // Add CORS-friendly headers
         headers.set('content-type', 'application/json')
         headers.set('accept', 'application/json')
-
-        // Add request ID for tracking
-        headers.set('x-request-id', crypto.randomUUID())
+        
+        // Remove problematic headers that might cause CORS preflight issues
+        // headers.set('x-request-id', crypto.randomUUID()) // Comment out for now
 
         return headers
     },
+    // Add fetch options for CORS
+    fetchFn: async (input, init) => {
+        // Add CORS mode explicitly
+        const modifiedInit = {
+            ...init,
+            mode: 'cors' as RequestMode,
+            // credentials: 'include' as RequestCredentials,
+        }
+        
+        try {
+            const response = await fetch(input, modifiedInit)
+            
+            // Handle CORS errors specifically
+            if (!response.ok && response.status === 0) {
+                throw new Error('CORS_ERROR')
+            }
+            
+            return response
+        } catch (error) {
+            // Handle network errors that might be CORS-related
+            if (error instanceof TypeError && error.message.includes('fetch')) {
+                console.error('🚨 Network Error - Possible CORS issue:', error)
+                throw new Error('NETWORK_ERROR')
+            }
+            throw error
+        }
+    },
 })
 
-// Base query with automatic token refresh
+// Base query with automatic token refresh and better error handling
 const baseQueryWithReauth: BaseQueryFn<
     string | FetchArgs,
     unknown,
@@ -36,6 +63,23 @@ const baseQueryWithReauth: BaseQueryFn<
 > = async (args, api, extraOptions) => {
     // Attempt the initial request
     let result = await baseQuery(args, api, extraOptions)
+
+    // Handle CORS and network errors
+    if (result.error && result.error.status === 'FETCH_ERROR') {
+        const errorMessage = (result.error as any).error
+        
+        if (errorMessage === 'CORS_ERROR') {
+            console.error('🚨 CORS Error detected')
+            toast.error('Connection blocked by CORS policy. Please check server configuration.')
+            return result
+        }
+        
+        if (errorMessage === 'NETWORK_ERROR') {
+            console.error('🚨 Network Error detected')
+            toast.error('Network error. Please check your connection and server status.')
+            return result
+        }
+    }
 
     // If we get a 401 Unauthorized error, try to refresh the token
     if (result.error && result.error.status === 401) {
@@ -91,12 +135,22 @@ const baseQueryWithReauth: BaseQueryFn<
     return result
 }
 
-// Global API error handler
+// Enhanced API error handler with better CORS handling
 const handleApiError = (error: FetchBaseQueryError, api: any) => {
     let message = 'An unexpected error occurred'
 
     if (error.status === 'FETCH_ERROR') {
-        message = 'Network error. Please check your connection.'
+        const errorMessage = (error as any).error || 'Unknown fetch error'
+        
+        if (errorMessage === 'CORS_ERROR') {
+            message = 'Connection blocked by CORS policy. Please contact support.'
+        } else if (errorMessage === 'NETWORK_ERROR') {
+            message = 'Network error. Please check your connection.'
+        } else if (errorMessage.includes('Failed to fetch')) {
+            message = 'Unable to connect to server. Please check your internet connection.'
+        } else {
+            message = 'Network error. Please check your connection and try again.'
+        }
     } else if (error.status === 'PARSING_ERROR') {
         message = 'Invalid response from server.'
     } else if (error.status === 'TIMEOUT_ERROR') {
@@ -104,6 +158,9 @@ const handleApiError = (error: FetchBaseQueryError, api: any) => {
     } else if (typeof error.status === 'number') {
         // HTTP status errors
         switch (error.status) {
+            case 0:
+                message = 'Connection failed. Please check if the server is running.'
+                break
             case 400:
                 message = (error.data as any)?.message || 'Invalid request'
                 break
@@ -133,11 +190,12 @@ const handleApiError = (error: FetchBaseQueryError, api: any) => {
         }
     }
 
-    // Log error for debugging
+    // Log error for debugging with more details
     console.error('API Error:', {
         status: error.status,
         data: error.data,
         message,
+        originalError: error,
     })
 
     // Don't show toast for validation errors (422) - let components handle them
@@ -178,7 +236,7 @@ export const api = createApi({
     refetchOnReconnect: true,
 })
 
-// Enhanced API utilities
+// Enhanced API utilities with better error handling
 export const apiUtils = {
     /**
      * Reset all API cache
@@ -224,6 +282,33 @@ export const apiUtils = {
     },
 
     /**
+     * Test API connection
+     */
+    testConnection: async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/health`, {
+                method: 'GET',
+                mode: 'cors',
+                // credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            
+            if (response.ok) {
+                console.log('✅ API connection successful')
+                return true
+            } else {
+                console.error('❌ API connection failed:', response.status)
+                return false
+            }
+        } catch (error) {
+            console.error('❌ API connection error:', error)
+            return false
+        }
+    },
+
+    /**
      * Subscribe to cache changes
      */
     subscribeToCache: (endpointName: string, arg: any, callback: (data: any) => void) => {
@@ -257,7 +342,7 @@ export type ApiError = {
     }
 }
 
-// Common query options
+// Common query options with better retry logic
 export const commonQueryOptions = {
     // Retry failed requests up to 3 times
     retry: (failureCount: number, error: any) => {
@@ -267,6 +352,12 @@ export const commonQueryOptions = {
         // Don't retry on validation errors
         if (error.status === 422) return false
 
+        // Don't retry on CORS errors
+        if (error.status === 'FETCH_ERROR' && 
+            (error.error === 'CORS_ERROR' || error.error === 'NETWORK_ERROR')) {
+            return false
+        }
+
         // Retry up to 3 times for other errors
         return failureCount < 3
     },
@@ -275,26 +366,20 @@ export const commonQueryOptions = {
     retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
 }
 
-// Performance monitoring
+// Development environment helpers
 if (process.env.NODE_ENV === 'development') {
-    // Monitor API performance in development
-    const originalBaseQuery = baseQuery
-
-    // Wrap base query with performance monitoring
-    const monitoredBaseQuery: typeof baseQuery = async (args, api, extraOptions) => {
-        const start = performance.now()
-        const result = await originalBaseQuery(args, api, extraOptions)
-        const duration = performance.now() - start
-
-        const url = typeof args === 'string' ? args : args.url
-        console.log(`🚀 API Call: ${url} took ${duration.toFixed(2)}ms`)
-
-        if (duration > 2000) {
-            console.warn(`⚠️ Slow API call detected: ${url} (${duration.toFixed(2)}ms)`)
+    // Log API base URL for debugging
+    console.log('🔗 API Base URL:', API_BASE_URL)
+    
+    // Test connection on app start
+    apiUtils.testConnection().then(success => {
+        if (!success) {
+            console.error('⚠️ API connection test failed. Please check:')
+            console.error('   1. Server is running')
+            console.error('   2. CORS is properly configured')
+            console.error('   3. API_BASE_URL is correct')
         }
-
-        return result
-    }
+    })
 }
 
 // Request deduplication helper

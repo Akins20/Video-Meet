@@ -49,15 +49,6 @@
     "baseUrl": "./src",
     "paths": {
       "@/*": ["*"],
-      "@/config/*": ["config/*"],
-      "@/controllers/*": ["controllers/*"],
-      "@/middleware/*": ["middleware/*"],
-      "@/models/*": ["models/*"],
-      "@/routes/*": ["routes/*"],
-      "@/services/*": ["services/*"],
-      "@/socket/*": ["socket/*"],
-      "@/types/*": ["types/*"],
-      "@/utils/*": ["utils/*"]
     },
     
     /* Advanced */

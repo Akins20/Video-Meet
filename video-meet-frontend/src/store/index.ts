@@ -7,6 +7,10 @@ import { encryptTransform as createEncryptTransform } from 'redux-persist-transf
 import authReducer from './authSlice'
 import meetingReducer from './meetingSlice'
 import participantReducer from './participantSlice'
+
+// 🔥 Import your existing meetingApi
+import { meetingApi } from './api/meetingApi'
+
 // Future reducers will be imported here:
 // import uiReducer from './uiSlice'
 
@@ -74,7 +78,8 @@ const rootPersistConfig = {
     storage,
     // Only persist specific slices
     whitelist: ['auth', 'participant'], // Add other slices as needed: 'ui', 'settings'
-    blacklist: ['meeting'], // Don't persist real-time meeting data
+    // 🔥 Don't persist RTK Query API cache
+    blacklist: ['meeting', 'api'], // Don't persist real-time meeting data
 }
 
 // Combine reducers
@@ -82,6 +87,8 @@ const rootReducer = combineReducers({
     auth: persistReducer(authPersistConfig, authReducer),
     meeting: meetingReducer, // No persistence for real-time meeting data
     participant: persistReducer(participantPersistConfig, participantReducer),
+    // 🔥 Add RTK Query API reducer (this line is the key addition)
+    [meetingApi.reducerPath]: meetingApi.reducer,
     // Add future reducers here:
     // ui: uiReducer,
 })
@@ -156,15 +163,42 @@ export const store = configureStore({
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({
             serializableCheck: {
-                ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
+                ignoredActions: [
+                    FLUSH, 
+                    REHYDRATE, 
+                    PAUSE, 
+                    PERSIST, 
+                    PURGE, 
+                    REGISTER,
+                    // 🔥 Add RTK Query ignored actions
+                    'api/executeMutation/pending',
+                    'api/executeMutation/fulfilled',
+                    'api/executeMutation/rejected',
+                    'api/executeQuery/pending',
+                    'api/executeQuery/fulfilled',
+                    'api/executeQuery/rejected',
+                ],
                 // Ignore these field paths in all actions
-                ignoredActionsPaths: ['meta.arg', 'payload.timestamp'],
+                ignoredActionsPaths: [
+                    'meta.arg', 
+                    'payload.timestamp',
+                    'meta.baseQueryMeta'
+                ],
                 // Ignore these paths in the state
-                ignoredPaths: ['items.dates'],
+                ignoredPaths: [
+                    'items.dates',
+                    'api.queries',
+                    'api.mutations',
+                    'api.provided',
+                    'api.subscriptions',
+                    'api.config'
+                ],
             },
             // Disable immutability check in production for performance
             immutableCheck: process.env.NODE_ENV !== 'production',
         })
+            // 🔥 THIS IS THE CRUCIAL LINE - Add RTK Query middleware
+            .concat(meetingApi.middleware)
             .concat(authMiddleware)
             .concat(meetingMiddleware)
             .concat(tokenExpirationMiddleware),

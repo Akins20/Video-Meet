@@ -23,26 +23,24 @@ class ApiClient {
     private failedQueue: QueuedRequest[] = []
 
     constructor() {
-        // Create axios instance with Render-compatible configuration
+        // Create axios instance with minimal, compatible configuration
         this.client = axios.create({
             baseURL: ENV_CONFIG.apiUrl,
             timeout: TIME_CONFIG.timeouts.apiRequest,
             
-            // 🔥 Render-compatible headers
+            // 🔥 MINIMAL headers to avoid CORS issues
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                // Add origin header for CORS
-                'Origin': typeof window !== 'undefined' ? window.location.origin : undefined,
             },
             
-            // 🔥 CORS configuration for Render
-            withCredentials: false, // Disable for Render CORS
+            // 🔥 DISABLE credentials - this is often the culprit
+            withCredentials: false,
             
-            // Enable automatic request/response compression
+            // Enable compression
             decompress: true,
             
-            // Set max content length (100MB)
+            // Set reasonable limits
             maxContentLength: 100 * 1024 * 1024,
             maxBodyLength: 100 * 1024 * 1024,
             
@@ -54,7 +52,7 @@ class ApiClient {
     }
 
     private setupInterceptors() {
-        // Request interceptor
+        // Request interceptor - Keep it simple
         this.client.interceptors.request.use(
             (config: InternalAxiosRequestConfig) => {
                 // Add auth token if available
@@ -63,14 +61,17 @@ class ApiClient {
                     config.headers.Authorization = `Bearer ${token}`
                 }
                 
-                // Ensure proper Content-Type
+                // Only set Content-Type for non-FormData
                 if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
                     config.headers['Content-Type'] = 'application/json'
                 }
 
-                // Always log requests for debugging
-                console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+                // Enhanced logging
+                console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`, {
+                    method: config.method,
+                    url: config.url,
                     baseURL: config.baseURL,
+                    fullURL: `${config.baseURL}${config.url}`,
                     headers: config.headers,
                     data: config.data,
                 })
@@ -78,31 +79,36 @@ class ApiClient {
                 return config
             },
             (error) => {
-                console.error('Request interceptor error:', error)
+                console.error('❌ Request interceptor error:', error)
                 return Promise.reject(this.handleRequestError(error))
             }
         )
 
-        // Response interceptor
+        // Response interceptor - Enhanced error handling
         this.client.interceptors.response.use(
             (response: AxiosResponse) => {
-                // Always log responses for debugging
                 console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
                     status: response.status,
                     statusText: response.statusText,
+                    headers: response.headers,
                     data: response.data,
                 })
 
                 return this.transformSuccessResponse(response)
             },
             async (error: AxiosError) => {
-                // Always log errors for debugging
-                console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+                console.error(`❌ API Error Details:`, {
+                    message: error.message,
+                    code: error.code,
                     status: error.response?.status,
                     statusText: error.response?.statusText,
                     data: error.response?.data,
-                    message: error.message,
-                    code: error.code,
+                    config: {
+                        method: error.config?.method,
+                        url: error.config?.url,
+                        baseURL: error.config?.baseURL,
+                        headers: error.config?.headers,
+                    }
                 })
 
                 return this.handleResponseError(error)
@@ -113,7 +119,7 @@ class ApiClient {
     private async handleResponseError(error: AxiosError): Promise<never> {
         const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean }
 
-        // Network errors
+        // Network errors (no response received)
         if (!error.response) {
             const networkError = this.createNetworkError(error)
             this.showErrorToast(networkError.message)
@@ -160,11 +166,12 @@ class ApiClient {
                 throw new Error('No refresh token available')
             }
 
+            // 🔥 Use correct endpoint for token refresh
             const response = await this.client.post('/auth/refresh-token', {
                 refreshToken,
             })
 
-            if (response.data.success) {
+            if (response.data?.success) {
                 const { accessToken, expiresIn } = response.data.data
                 this.storeTokens(accessToken, refreshToken, expiresIn)
                 this.dispatchTokenRefreshSuccess(accessToken, expiresIn)
@@ -194,23 +201,25 @@ class ApiClient {
     private handleRequestError(error: any): NetworkError {
         return {
             type: 'FETCH_ERROR',
-            message: ERROR_MESSAGES.network.serverError,
+            message: 'Request setup failed',
             originalError: error,
         }
     }
 
     private createNetworkError(error: AxiosError): NetworkError {
-        console.error('Network error details:', {
+        console.error('🔍 Network error analysis:', {
             message: error.message,
             code: error.code,
             stack: error.stack,
+            request: error.request,
+            response: error.response,
         })
 
-        // Enhanced error detection
-        if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
+        // Check for specific error types
+        if (error.code === 'ERR_NETWORK') {
             return {
-                type: 'CORS_ERROR',
-                message: 'CORS error: Server not allowing requests from this origin.',
+                type: 'NETWORK_ERROR',
+                message: 'Network connection failed. Please check your internet connection and try again.',
                 originalError: error,
             }
         }
@@ -218,15 +227,7 @@ class ApiClient {
         if (error.code === 'ECONNABORTED') {
             return {
                 type: 'TIMEOUT_ERROR',
-                message: ERROR_MESSAGES.network.timeout,
-                originalError: error,
-            }
-        }
-
-        if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
-            return {
-                type: 'NETWORK_ERROR',
-                message: 'Network error: Unable to connect to server.',
+                message: 'Request timed out. Please try again.',
                 originalError: error,
             }
         }
@@ -234,23 +235,34 @@ class ApiClient {
         if (error.message.includes('ERR_FAILED')) {
             return {
                 type: 'FETCH_ERROR',
-                message: 'Connection failed: Server may be down or blocking requests.',
+                message: 'Connection failed. The server may be temporarily unavailable.',
                 originalError: error,
             }
         }
 
+        if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
+            return {
+                type: 'CORS_ERROR',
+                message: 'CORS policy blocked the request. Please check server configuration.',
+                originalError: error,
+            }
+        }
+
+        // Generic network error
         return {
-            type: 'FETCH_ERROR',
-            message: ERROR_MESSAGES.network.serverError,
+            type: 'NETWORK_ERROR',
+            message: 'Unable to connect to the server. Please check your connection and try again.',
             originalError: error,
         }
     }
 
     private transformSuccessResponse(response: AxiosResponse): AxiosResponse {
-        response.data._meta = {
-            status: response.status,
-            statusText: response.statusText,
-            timestamp: new Date().toISOString(),
+        // Add minimal metadata
+        if (response.data && typeof response.data === 'object') {
+            response.data._meta = {
+                status: response.status,
+                timestamp: new Date().toISOString(),
+            }
         }
         return response
     }
@@ -273,31 +285,35 @@ class ApiClient {
     private getDefaultErrorMessage(status: number): string {
         switch (status) {
             case 400:
-                return ERROR_MESSAGES.general.validation
+                return 'Bad request. Please check your input.'
             case 401:
-                return ERROR_MESSAGES.auth.sessionExpired
+                return 'Authentication required. Please log in again.'
             case 403:
-                return ERROR_MESSAGES.network.forbidden
+                return 'Access forbidden. You don\'t have permission.'
             case 404:
-                return ERROR_MESSAGES.network.notFound
+                return 'Resource not found.'
             case 409:
-                return 'A conflict occurred. Please try again.'
+                return 'Conflict occurred. Please try again.'
             case 422:
-                return ERROR_MESSAGES.general.validation
+                return 'Validation error. Please check your input.'
             case 429:
-                return ERROR_MESSAGES.network.rateLimited
+                return 'Too many requests. Please slow down.'
             case 500:
-                return ERROR_MESSAGES.network.serverError
+                return 'Server error. Please try again later.'
             case 503:
-                return ERROR_MESSAGES.general.maintenance
+                return 'Service unavailable. Please try again later.'
             default:
-                return ERROR_MESSAGES.general.unknown
+                return 'An unexpected error occurred.'
         }
     }
 
     private showErrorToast(message: string) {
+        // Debounce error toasts
         if (!this.lastErrorToast || Date.now() - this.lastErrorToast > 3000) {
-            toast.error(message)
+            toast.error(message, {
+                duration: 4000,
+                position: 'top-right',
+            })
             this.lastErrorToast = Date.now()
         }
     }
@@ -319,11 +335,11 @@ class ApiClient {
     }
 
     private dispatchTokenRefreshSuccess(accessToken: string, expiresIn: number) {
-        console.log('Token refreshed successfully')
+        console.log('✅ Token refreshed successfully')
     }
 
     private dispatchTokenRefreshFailure() {
-        console.log('Token refresh failed - logging out user')
+        console.log('❌ Token refresh failed - logging out user')
     }
 
     private handleAuthFailure() {
@@ -372,7 +388,7 @@ class ApiClient {
 
         const config: AxiosRequestConfig = {
             headers: {
-                // Let browser set Content-Type automatically
+                // Let browser set Content-Type for FormData
             },
             onUploadProgress: (progressEvent) => {
                 if (onProgress && progressEvent.total) {
@@ -404,12 +420,21 @@ class ApiClient {
         window.URL.revokeObjectURL(downloadUrl)
     }
 
+    // 🔥 Fixed health check - use correct endpoint
     public async healthCheck(): Promise<boolean> {
         try {
-            const response = await this.client.get('/health', { timeout: 10000 })
+            // Use the health endpoint correctly
+            const healthUrl = ENV_CONFIG.apiUrl.replace('/api/v1', '/health')
+            const response = await axios.get(healthUrl, { 
+                timeout: 10000,
+                headers: {
+                    'Accept': 'application/json',
+                }
+            })
+            console.log('✅ Health check successful:', response.status)
             return response.status === 200
         } catch (error) {
-            console.error('Health check failed:', error)
+            console.error('❌ Health check failed:', error)
             return false
         }
     }
@@ -425,35 +450,55 @@ class ApiClient {
         return this.client
     }
 
-    // Enhanced CORS testing
-    public async testCors(): Promise<boolean> {
+    // 🔥 Enhanced connectivity testing
+    public async testConnectivity(): Promise<boolean> {
         try {
-            console.log('🔍 Testing CORS connectivity to:', ENV_CONFIG.apiUrl)
+            console.log('🔍 Testing connectivity to:', ENV_CONFIG.apiUrl)
             
-            // Test with fetch first (simpler)
-            const healthUrl = `${ENV_CONFIG.apiUrl.replace('/api/v1', '')}/health`
-            const fetchResponse = await fetch(healthUrl, {
+            // Test 1: Simple fetch to health endpoint
+            const healthUrl = ENV_CONFIG.apiUrl.replace('/api/v1', '/health')
+            console.log('Health URL:', healthUrl)
+            
+            const response = await fetch(healthUrl, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                 },
                 mode: 'cors',
             })
             
-            if (fetchResponse.ok) {
-                console.log('✅ Fetch CORS test successful:', fetchResponse.status)
-                
-                // Now test with axios
-                const axiosResponse = await this.client.get('/health', { timeout: 10000 })
-                console.log('✅ Axios CORS test successful:', axiosResponse.status)
-                return true
-            } else {
-                console.log('❌ Fetch CORS test failed:', fetchResponse.status)
-                return false
-            }
+            console.log('Connectivity test result:', {
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries()),
+            })
+            
+            return response.ok
         } catch (error) {
-            console.error('❌ CORS test failed:', error)
+            console.error('❌ Connectivity test failed:', error)
+            return false
+        }
+    }
+
+    // 🔥 Test specific API endpoint
+    public async testLoginEndpoint(): Promise<boolean> {
+        try {
+            console.log('🔍 Testing login endpoint...')
+            
+            // Make a test request to login endpoint (should return 400 or 422 for empty data)
+            const response = await this.client.post('/auth/login', {
+                test: 'connectivity'
+            })
+            
+            console.log('Login endpoint test:', response.status)
+            return true
+        } catch (error) {
+            console.error('❌ Login endpoint test failed:', error)
+            // Even if it fails with 400/422, it means the endpoint is reachable
+            if (error instanceof AxiosError && error.response) {
+                console.log('Login endpoint is reachable (status:', error.response.status, ')')
+                return true
+            }
             return false
         }
     }
@@ -465,7 +510,7 @@ export const apiClient = new ApiClient()
 // Export default instance
 export default apiClient
 
-// Export typed request methods for convenience
+// Export typed request methods
 export const api = {
     get: apiClient.get.bind(apiClient),
     post: apiClient.post.bind(apiClient),
@@ -475,56 +520,49 @@ export const api = {
     uploadFile: apiClient.uploadFile.bind(apiClient),
     downloadFile: apiClient.downloadFile.bind(apiClient),
     healthCheck: apiClient.healthCheck.bind(apiClient),
-    testCors: apiClient.testCors.bind(apiClient),
+    testConnectivity: apiClient.testConnectivity.bind(apiClient),
+    testLoginEndpoint: apiClient.testLoginEndpoint.bind(apiClient),
 }
 
-// Debug utilities
+// Debugging utilities
 export const apiUtils = {
-    createUrl: (baseUrl: string, params?: Record<string, any>): string => {
-        if (!params) return baseUrl
-        const searchParams = new URLSearchParams()
-        Object.entries(params).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-                searchParams.append(key, String(value))
-            }
-        })
-        return `${baseUrl}?${searchParams.toString()}`
+    debugRequest: async (url: string, options: any = {}) => {
+        console.group('🔍 API Debug Request')
+        console.log('URL:', url)
+        console.log('Options:', options)
+        console.log('Full URL:', `${ENV_CONFIG.apiUrl}${url}`)
+        
+        try {
+            const response = await apiClient.post(url, options)
+            console.log('✅ Success:', response)
+            console.groupEnd()
+            return response
+        } catch (error) {
+            console.error('❌ Error:', error)
+            console.groupEnd()
+            throw error
+        }
     },
 
-    debugCors: async (): Promise<void> => {
-        console.group('🔍 CORS Debug Information')
-        console.log('API Base URL:', ENV_CONFIG.apiUrl)
-        console.log('Current Origin:', window.location.origin)
-        console.log('Current URL:', window.location.href)
-        console.log('User Agent:', navigator.userAgent)
+    testAllEndpoints: async () => {
+        console.group('🔍 Testing All Endpoints')
         
-        // Test basic connectivity
-        const corsTest = await api.testCors()
-        console.log('CORS Test Result:', corsTest ? '✅ PASS' : '❌ FAIL')
+        const tests = [
+            { name: 'Health Check', fn: api.healthCheck },
+            { name: 'Connectivity Test', fn: api.testConnectivity },
+            { name: 'Login Endpoint', fn: api.testLoginEndpoint },
+        ]
         
-        // Test OPTIONS request
-        try {
-            const optionsResponse = await fetch(`${ENV_CONFIG.apiUrl.replace('/api/v1', '')}/health`, {
-                method: 'OPTIONS',
-                headers: {
-                    'Access-Control-Request-Method': 'GET',
-                    'Access-Control-Request-Headers': 'content-type,authorization',
-                },
-                mode: 'cors',
-            })
-            console.log('OPTIONS preflight test:', optionsResponse.status)
-        } catch (error) {
-            console.log('OPTIONS preflight failed:', error)
+        for (const test of tests) {
+            try {
+                console.log(`Testing ${test.name}...`)
+                const result = await test.fn()
+                console.log(`✅ ${test.name}:`, result)
+            } catch (error) {
+                console.error(`❌ ${test.name}:`, error)
+            }
         }
         
         console.groupEnd()
-    },
-
-    isRetryableError: (error: any): boolean => {
-        if (error.response?.status) {
-            const status = error.response.status
-            return status >= 500 || status === 408 || status === 429
-        }
-        return false
     }
 }

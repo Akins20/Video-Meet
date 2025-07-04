@@ -89,6 +89,10 @@ export const useAuth = () => {
 
             if (response.data.success) {
                 const { user, accessToken, refreshToken, expiresIn } = response.data.data
+                console.log('Login response:', response.data)
+                console.log('Login successful:', user)
+
+
 
                 // Update Redux store (this will handle persistence automatically)
                 dispatch(loginSuccess({
