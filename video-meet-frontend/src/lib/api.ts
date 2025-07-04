@@ -23,38 +23,53 @@ class ApiClient {
     private failedQueue: QueuedRequest[] = []
 
     constructor() {
-        // Create axios instance with default configuration
+        // Create axios instance with CORS-friendly configuration
         this.client = axios.create({
             baseURL: ENV_CONFIG.apiUrl,
             timeout: TIME_CONFIG.timeouts.apiRequest,
+            
+            // 🔥 CORS-friendly headers - only include essential ones
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
             },
+            
+            // 🔥 Enable credentials for CORS
+            withCredentials: true,
+            
             // Enable automatic request/response compression
             decompress: true,
+            
             // Set max content length (100MB)
             maxContentLength: 100 * 1024 * 1024,
             maxBodyLength: 100 * 1024 * 1024,
+            
+            // 🔥 Disable automatic JSON parsing for better error handling
+            validateStatus: (status) => status < 500, // Don't throw on 4xx errors
         })
 
         this.setupInterceptors()
     }
 
     private setupInterceptors() {
-        // Request interceptor - Add auth token and request ID
+        // Request interceptor - Add auth token and minimal headers
         this.client.interceptors.request.use(
             (config: InternalAxiosRequestConfig) => {
-                // Add request ID for tracking
-                config.headers['X-Request-ID'] = this.generateRequestId()
-
-                // Add timestamp for performance monitoring
+                // 🔥 Only add custom headers if absolutely necessary
+                // Removed X-Request-ID to avoid CORS preflight issues
+                
+                // Add timestamp for performance monitoring (commented out to avoid CORS issues)
                 // config.metadata = { startTime: Date.now() }
 
                 // Add auth token if available
                 const token = this.getAccessToken()
                 if (token) {
                     config.headers.Authorization = `Bearer ${token}`
+                }
+                
+                // 🔥 Ensure proper Content-Type for different request types
+                if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
+                    config.headers['Content-Type'] = 'application/json'
                 }
 
                 // Log request in development
@@ -75,21 +90,13 @@ class ApiClient {
         // Response interceptor - Handle auth and errors
         this.client.interceptors.response.use(
             (response: AxiosResponse) => {
-                // Calculate request duration
-                // const duration = Date.now() - (response.config.metadata?.startTime || 0)
-
-                // // Log response in development
-                // if (ENV_CONFIG.isDevelopment) {
-                //     console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url} (${duration}ms)`, {
-                //         status: response.status,
-                //         data: response.data,
-                //     })
-
-                //     // Warn about slow requests
-                //     if (duration > 2000) {
-                //         console.warn(`⚠️ Slow API request detected: ${response.config.url} took ${duration}ms`)
-                //     }
-                // }
+                // Log response in development
+                if (ENV_CONFIG.isDevelopment) {
+                    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+                        status: response.status,
+                        data: response.data,
+                    })
+                }
 
                 // Transform response data
                 return this.transformSuccessResponse(response)
@@ -160,7 +167,8 @@ class ApiClient {
                 throw new Error('No refresh token available')
             }
 
-            const response = await axios.post(`${ENV_CONFIG.apiUrl}/auth/refresh-token`, {
+            // 🔥 Use the same client instance for token refresh to inherit CORS settings
+            const response = await this.client.post('/auth/refresh-token', {
                 refreshToken,
             })
 
@@ -203,6 +211,15 @@ class ApiClient {
     }
 
     private createNetworkError(error: AxiosError): NetworkError {
+        // 🔥 Enhanced CORS error detection
+        if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
+            return {
+                type: 'CORS_ERROR',
+                message: 'Cross-origin request blocked. Please check server configuration.',
+                originalError: error,
+            }
+        }
+
         if (error.code === 'ECONNABORTED') {
             return {
                 type: 'TIMEOUT_ERROR',
@@ -227,12 +244,11 @@ class ApiClient {
     }
 
     private transformSuccessResponse(response: AxiosResponse): AxiosResponse {
-        // Add request metadata to response
+        // 🔥 Simplified response transformation to avoid CORS issues
         response.data._meta = {
             status: response.status,
             statusText: response.statusText,
-            // duration: Date.now() - (response.config.metadata?.startTime || 0),
-            requestId: response.config.headers['X-Request-ID'],
+            timestamp: new Date().toISOString(),
         }
 
         return response
@@ -250,7 +266,7 @@ class ApiClient {
                 details: data?.error?.details || data,
             },
             timestamp: new Date().toISOString(),
-            requestId: error.config?.headers['X-Request-ID'] as string,
+            // Removed requestId to avoid CORS issues
         }
     }
 
@@ -288,10 +304,6 @@ class ApiClient {
     }
 
     private lastErrorToast = 0
-
-    private generateRequestId(): string {
-        return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    }
 
     private getAccessToken(): string | null {
         // This will be replaced with Redux store access
@@ -358,7 +370,7 @@ class ApiClient {
         return response.data
     }
 
-    // File upload method
+    // 🔥 Fixed file upload method with proper CORS handling
     public async uploadFile<T = any>(
         url: string,
         file: File,
@@ -368,8 +380,11 @@ class ApiClient {
         formData.append('file', file)
 
         const config: AxiosRequestConfig = {
+            // 🔥 Don't set Content-Type header - let browser set it automatically
+            // This is crucial for multipart/form-data CORS requests
             headers: {
-                'Content-Type': 'multipart/form-data',
+                // Remove Content-Type header to avoid CORS issues
+                // Browser will set it automatically with boundary
             },
             onUploadProgress: (progressEvent) => {
                 if (onProgress && progressEvent.total) {
@@ -427,6 +442,33 @@ class ApiClient {
     public getClient(): AxiosInstance {
         return this.client
     }
+
+    // 🔥 Method to test CORS connectivity
+    public async testCors(): Promise<boolean> {
+        try {
+            console.log('🔍 Testing CORS connectivity...')
+            const response = await this.client.get('/health', { 
+                timeout: 10000,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            })
+            console.log('✅ CORS test successful:', response.status)
+            return true
+        } catch (error) {
+            console.error('❌ CORS test failed:', error)
+            if (error instanceof AxiosError) {
+                console.error('Error details:', {
+                    message: error.message,
+                    code: error.code,
+                    response: error.response?.data,
+                    status: error.response?.status
+                })
+            }
+            return false
+        }
+    }
 }
 
 // Create and export singleton instance
@@ -445,6 +487,7 @@ export const api = {
     uploadFile: apiClient.uploadFile.bind(apiClient),
     downloadFile: apiClient.downloadFile.bind(apiClient),
     healthCheck: apiClient.healthCheck.bind(apiClient),
+    testCors: apiClient.testCors.bind(apiClient),
 }
 
 // Utility functions for common API patterns
@@ -491,6 +534,11 @@ export const apiUtils = {
                     throw error
                 }
 
+                // Don't retry CORS errors
+                if (typeof error === 'object' && error !== null && 'type' in error && (error as any).type === 'CORS_ERROR') {
+                    throw error
+                }
+
                 // Wait before retry with exponential backoff
                 await new Promise(resolve =>
                     setTimeout(resolve, delay * Math.pow(backoff, attempt - 1))
@@ -524,6 +572,7 @@ export const apiUtils = {
      */
     isRetryableError: (error: any): boolean => {
         if (errorUtils.isAuthError(error)) return false
+        if (error.type === 'CORS_ERROR') return false
         if (errorUtils.isNetworkError(error)) return true
 
         // Check HTTP status codes
@@ -534,6 +583,52 @@ export const apiUtils = {
 
         return false
     },
+
+    /**
+     * 🔥 CORS debugging helper
+     */
+    debugCors: async (): Promise<void> => {
+        console.log('🔍 CORS Debug Information:')
+        console.log('API Base URL:', ENV_CONFIG.apiUrl)
+        console.log('Current Origin:', window.location.origin)
+        console.log('User Agent:', navigator.userAgent)
+        
+        // Test basic connectivity
+        const corsTest = await api.testCors()
+        console.log('CORS Test Result:', corsTest ? '✅ PASS' : '❌ FAIL')
+        
+        // Test different request types
+        const tests = [
+            { method: 'GET', url: '/health', description: 'Simple GET request' },
+            { method: 'POST', url: '/auth/login', description: 'POST request with JSON' },
+            { method: 'OPTIONS', url: '/health', description: 'Preflight OPTIONS request' },
+        ]
+        
+        for (const test of tests) {
+            try {
+                console.log(`Testing ${test.description}...`)
+                if (test.method === 'OPTIONS') {
+                    // Test OPTIONS request directly
+                    await fetch(`${ENV_CONFIG.apiUrl}${test.url}`, {
+                        method: 'OPTIONS',
+                        headers: {
+                            'Access-Control-Request-Method': 'GET',
+                            'Access-Control-Request-Headers': 'authorization,content-type',
+                        }
+                    })
+                } else {
+                    await apiClient.getClient().request({
+                        method: test.method.toLowerCase(),
+                        url: test.url,
+                        timeout: 5000,
+                    })
+                }
+                console.log(`✅ ${test.description} - SUCCESS`)
+            } catch (error) {
+                console.log(`❌ ${test.description} - FAILED:`, error)
+            }
+        }
+    }
 }
 
 // Request interceptor for adding custom headers

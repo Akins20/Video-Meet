@@ -55,7 +55,7 @@ export interface ApiValidationError extends ApiError {
 
 // Network/Connection errors
 export interface NetworkError {
-    type: 'NETWORK_ERROR' | 'TIMEOUT_ERROR' | 'FETCH_ERROR' | 'PARSING_ERROR'
+    type: 'NETWORK_ERROR' | 'TIMEOUT_ERROR' | 'FETCH_ERROR' | 'PARSING_ERROR' | 'CORS_ERROR'
     message: string
     status?: number
     originalError?: any

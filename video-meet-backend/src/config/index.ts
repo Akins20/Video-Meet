@@ -160,7 +160,7 @@ const config: Config = {
   // Security settings
   security: {
     bcryptRounds: parseIntEnv(process.env.BCRYPT_ROUNDS, 12),
-    corsOrigins: parseArrayEnv(process.env.ALLOWED_ORIGINS, ['http://localhost:3000']),
+    corsOrigins: parseArrayEnv(process.env.ALLOWED_ORIGINS, ["*"]),
     rateLimit: {
       windowMs: parseIntEnv(process.env.RATE_LIMIT_WINDOW, 15) * 60 * 1000, // Convert to milliseconds
       maxRequests: parseIntEnv(process.env.RATE_LIMIT_MAX_REQUESTS, 100),

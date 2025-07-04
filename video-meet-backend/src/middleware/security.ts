@@ -242,27 +242,20 @@ export const signalingRateLimit = createRateLimit({
 });
 
 /**
- * CORS configuration
+ * 🔥 COMPLETELY PUBLIC CORS CONFIGURATION
+ * This allows ALL origins to access your API
+ * ⚠️ Only use this for development or truly public APIs
  */
 export const corsMiddleware = cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, etc.)
-    if (!origin) return callback(null, true);
-
-    // Check if origin is in allowed list
-    if (config.security.corsOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // Allow localhost in development
-    if (config.nodeEnv === "development" && origin.includes("localhost")) {
-      return callback(null, true);
-    }
-
-    callback(new Error("Not allowed by CORS"));
-  },
+  // Allow ALL origins - this makes your API completely public
+  origin: "*",
+  
+  // Alternative: You can also use:
+  // origin: "*"
+  // But "true" is more permissive and handles all cases
+  
   credentials: true, // Allow cookies and authorization headers
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
   allowedHeaders: [
     "Origin",
     "X-Requested-With",
@@ -272,39 +265,60 @@ export const corsMiddleware = cors({
     "X-RateLimit-Limit",
     "X-RateLimit-Remaining",
     "X-RateLimit-Reset",
+    "X-API-Key",
+    "X-Forwarded-For",
+    "User-Agent",
+    "Referer",
+    "Cache-Control",
+    "Pragma"
   ],
   exposedHeaders: [
     "X-RateLimit-Limit",
     "X-RateLimit-Remaining",
     "X-RateLimit-Reset",
     "Retry-After",
+    "X-Total-Count",
+    "X-Page-Count"
   ],
-  maxAge: 86400, // 24 hours
+  maxAge: 86400, // 24 hours - how long browsers cache preflight requests
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 });
 
 /**
- * Security headers middleware using Helmet
+ * 🛡️ RELAXED Security headers middleware using Helmet
+ * Modified to be more permissive while still maintaining basic security
  */
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:"],
-      scriptSrc: ["'self'"],
-      connectSrc: ["'self'", "wss:", "ws:"],
-      mediaSrc: ["'self'", "blob:"],
+      defaultSrc: ["'self'", "*"],
+      styleSrc: ["'self'", "'unsafe-inline'", "*"],
+      fontSrc: ["'self'", "*"],
+      imgSrc: ["'self'", "data:", "blob:", "*"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*"],
+      connectSrc: ["'self'", "wss:", "ws:", "*"],
+      mediaSrc: ["'self'", "blob:", "*"],
       objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
+      frameAncestors: ["'self'", "*"],
+      childSrc: ["'self'", "*"],
+      workerSrc: ["'self'", "blob:", "*"],
+      manifestSrc: ["'self'", "*"]
     },
   },
-  crossOriginEmbedderPolicy: false, // Disable for WebRTC compatibility
+  crossOriginEmbedderPolicy: false, // Disabled for WebRTC compatibility
+  crossOriginOpenerPolicy: false,   // Disabled for compatibility
+  crossOriginResourcePolicy: false, // Disabled for public access
   hsts: {
     maxAge: 31536000, // 1 year
     includeSubDomains: true,
     preload: true,
   },
+  // Allow all origins for cross-origin requests
+  frameguard: { action: 'sameorigin' },
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: { policy: "same-origin" }
 });
 
 /**
@@ -530,6 +544,7 @@ export const securityLogger = (
     ip: req.ip,
     userAgent: req.get("User-Agent"),
     referer: req.get("Referer"),
+    origin: req.get("Origin"),
     userId: (req as any).userId || null,
   };
 
@@ -548,6 +563,11 @@ export const securityLogger = (
       console.warn("🔒 Security event:", JSON.stringify(securityLog));
     }
 
+    // Log CORS preflight requests
+    if (req.method === 'OPTIONS') {
+      console.log("✈️ CORS preflight:", JSON.stringify(securityLog));
+    }
+
     // Log slow requests (potential DoS)
     if (duration > 10000) {
       // 10 seconds
@@ -555,6 +575,21 @@ export const securityLogger = (
     }
   });
 
+  next();
+};
+
+/**
+ * Additional middleware to handle preflight requests explicitly
+ */
+export const handlePreflight = (req: Request, res: Response, next: NextFunction): void => {
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-API-Key');
+    res.header('Access-Control-Max-Age', '86400');
+    res.status(204).send();
+    return;
+  }
   next();
 };
 
@@ -568,6 +603,8 @@ export const initSecurity = () => {
   });
 
   console.log("🔒 Security middleware initialized");
+  console.log("🌍 CORS configured for PUBLIC ACCESS - All origins allowed");
+  console.log("⚠️  WARNING: This configuration is for development/testing only!");
 };
 
 export default {
@@ -584,6 +621,7 @@ export default {
   requestSizeLimit,
   compressionMiddleware,
   securityLogger,
+  handlePreflight,
 
   // Advanced security
   ipFilter,

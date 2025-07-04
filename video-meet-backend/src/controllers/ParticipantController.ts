@@ -519,8 +519,8 @@ export class ParticipantController {
       }
 
       // Process each update
-      const results = [];
-      const errors = [];
+      const results: Array<{ participantId: any; action: any; success: boolean }> = [];
+      const errors: Array<{ participantId: any; action: any; error: any }> = [];
 
       for (const update of updates) {
         try {
