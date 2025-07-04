@@ -93,7 +93,7 @@ export class MeetingController {
         throw createError.validation("roomId is required");
       }
       const { password, guestName, deviceInfo } = req.body;
-      const userId = req.userId; // Optional for guest users
+      const userId = req.userId || req.user?._id.toString(); // Optional for guest users
       // Prepare join data
       const joinData = {
         roomId: roomId as string,
