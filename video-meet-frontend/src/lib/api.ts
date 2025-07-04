@@ -27,23 +27,23 @@ class ApiClient {
         this.client = axios.create({
             baseURL: ENV_CONFIG.apiUrl,
             timeout: TIME_CONFIG.timeouts.apiRequest,
-            
+
             // 🔥 MINIMAL headers to avoid CORS issues
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
             },
-            
+
             // 🔥 DISABLE credentials - this is often the culprit
             withCredentials: false,
-            
+
             // Enable compression
             decompress: true,
-            
+
             // Set reasonable limits
             maxContentLength: 100 * 1024 * 1024,
             maxBodyLength: 100 * 1024 * 1024,
-            
+
             // Don't throw on 4xx errors
             validateStatus: (status) => status < 500,
         })
@@ -60,7 +60,7 @@ class ApiClient {
                 if (token) {
                     config.headers.Authorization = `Bearer ${token}`
                 }
-                
+
                 // Only set Content-Type for non-FormData
                 if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
                     config.headers['Content-Type'] = 'application/json'
@@ -171,8 +171,8 @@ class ApiClient {
                 refreshToken,
             })
 
-            if (response.data?.success) {
-                const { accessToken, expiresIn } = response.data.data
+            if (response.data.success) {
+                const { accessToken, expiresIn } = response.data
                 this.storeTokens(accessToken, refreshToken, expiresIn)
                 this.dispatchTokenRefreshSuccess(accessToken, expiresIn)
             } else {
@@ -287,6 +287,9 @@ class ApiClient {
             case 400:
                 return 'Bad request. Please check your input.'
             case 401:
+                if (typeof window !== 'undefined') {
+                    window.location.href = '/login'
+                }
                 return 'Authentication required. Please log in again.'
             case 403:
                 return 'Access forbidden. You don\'t have permission.'
@@ -425,7 +428,7 @@ class ApiClient {
         try {
             // Use the health endpoint correctly
             const healthUrl = ENV_CONFIG.apiUrl.replace('/api/v1', '/health')
-            const response = await axios.get(healthUrl, { 
+            const response = await axios.get(healthUrl, {
                 timeout: 10000,
                 headers: {
                     'Accept': 'application/json',
@@ -454,11 +457,11 @@ class ApiClient {
     public async testConnectivity(): Promise<boolean> {
         try {
             console.log('🔍 Testing connectivity to:', ENV_CONFIG.apiUrl)
-            
+
             // Test 1: Simple fetch to health endpoint
             const healthUrl = ENV_CONFIG.apiUrl.replace('/api/v1', '/health')
             console.log('Health URL:', healthUrl)
-            
+
             const response = await fetch(healthUrl, {
                 method: 'GET',
                 headers: {
@@ -466,13 +469,13 @@ class ApiClient {
                 },
                 mode: 'cors',
             })
-            
+
             console.log('Connectivity test result:', {
                 status: response.status,
                 statusText: response.statusText,
                 headers: Object.fromEntries(response.headers.entries()),
             })
-            
+
             return response.ok
         } catch (error) {
             console.error('❌ Connectivity test failed:', error)
@@ -484,12 +487,12 @@ class ApiClient {
     public async testLoginEndpoint(): Promise<boolean> {
         try {
             console.log('🔍 Testing login endpoint...')
-            
+
             // Make a test request to login endpoint (should return 400 or 422 for empty data)
             const response = await this.client.post('/auth/login', {
                 test: 'connectivity'
             })
-            
+
             console.log('Login endpoint test:', response.status)
             return true
         } catch (error) {
@@ -531,7 +534,7 @@ export const apiUtils = {
         console.log('URL:', url)
         console.log('Options:', options)
         console.log('Full URL:', `${ENV_CONFIG.apiUrl}${url}`)
-        
+
         try {
             const response = await apiClient.post(url, options)
             console.log('✅ Success:', response)
@@ -546,13 +549,13 @@ export const apiUtils = {
 
     testAllEndpoints: async () => {
         console.group('🔍 Testing All Endpoints')
-        
+
         const tests = [
             { name: 'Health Check', fn: api.healthCheck },
             { name: 'Connectivity Test', fn: api.testConnectivity },
             { name: 'Login Endpoint', fn: api.testLoginEndpoint },
         ]
-        
+
         for (const test of tests) {
             try {
                 console.log(`Testing ${test.name}...`)
@@ -562,7 +565,7 @@ export const apiUtils = {
                 console.error(`❌ ${test.name}:`, error)
             }
         }
-        
+
         console.groupEnd()
     }
 }

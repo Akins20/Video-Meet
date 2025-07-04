@@ -1,34 +1,527 @@
 "use client";
-import { FC } from "react";
+import { FC, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Mic, 
+  MicOff, 
+  Video, 
+  VideoOff, 
+  Monitor, 
+  MonitorOff,
+  Phone,
+  PhoneOff,
+  Settings,
+  MessageSquare,
+  Users,
+  MoreHorizontal,
+  Hand,
+  HandMetal,
+  Camera,
+  Volume2,
+  Share,
+  Loader2
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { LucideMic, LucideMicOff, LucideVideo, LucideVideoOff, LucideMonitor, LucideX } from "lucide-react";
 import { useMeeting } from "@/hooks/useMeeting";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { toast } from "react-hot-toast";
+
+interface ControlButtonProps {
+  icon: React.ReactNode;
+  activeIcon?: React.ReactNode;
+  isActive: boolean;
+  isEnabled?: boolean;
+  isLoading?: boolean;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary' | 'danger';
+  tooltip?: string;
+  className?: string;
+  badge?: number;
+}
+
+const containerVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 20,
+    scale: 0.95
+  },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 200,
+      damping: 20,
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const buttonVariants = {
+  hidden: { 
+    opacity: 0, 
+    scale: 0.8,
+    y: 10
+  },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25
+    }
+  }
+};
+
+const ControlButton: FC<ControlButtonProps> = ({
+  icon,
+  activeIcon,
+  isActive,
+  isEnabled = true,
+  isLoading = false,
+  onClick,
+  variant = 'secondary',
+  tooltip,
+  className,
+  badge
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const getButtonStyles = () => {
+    if (!isEnabled || isLoading) {
+      return "bg-slate-700/50 text-slate-500 cursor-not-allowed";
+    }
+
+    switch (variant) {
+      case 'primary':
+        return isActive 
+          ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25" 
+          : "bg-slate-700/80 text-slate-300 hover:bg-blue-500/20 hover:text-blue-400";
+      case 'danger':
+        return isActive 
+          ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-500/25" 
+          : "bg-slate-700/80 text-slate-300 hover:bg-red-500/20 hover:text-red-400";
+      default:
+        return isActive 
+          ? "bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg shadow-green-500/25" 
+          : "bg-slate-700/80 text-slate-300 hover:bg-slate-600/80 hover:text-white";
+    }
+  };
+
+  return (
+    <motion.div
+      className="relative"
+      variants={buttonVariants}
+      whileHover={{ scale: isEnabled && !isLoading ? 1.05 : 1 }}
+      whileTap={{ scale: isEnabled && !isLoading ? 0.95 : 1 }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+    >
+      <Button
+        onClick={isEnabled && !isLoading ? onClick : undefined}
+        className={`
+          relative h-12 w-12 rounded-xl border border-slate-600/50 
+          backdrop-blur-sm transition-all duration-200
+          ${getButtonStyles()}
+          ${className}
+        `}
+        disabled={!isEnabled || isLoading}
+      >
+        {/* Icon with smooth transition */}
+        <motion.div
+          className="relative"
+          animate={{ 
+            scale: isActive ? 1.1 : 1,
+            rotate: isActive ? 5 : 0
+          }}
+          transition={{ duration: 0.2 }}
+        >
+          {isLoading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            isActive && activeIcon ? activeIcon : icon
+          )}
+        </motion.div>
+
+        {/* Badge for participant count, etc. */}
+        {badge !== undefined && badge > 0 && (
+          <motion.div
+            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-medium rounded-full flex items-center justify-center"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            {badge > 99 ? '99+' : badge}
+          </motion.div>
+        )}
+
+        {/* Active state glow */}
+        {isActive && !isLoading && (
+          <motion.div
+            className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-400/20 to-purple-400/20 -z-10"
+            animate={{ 
+              scale: [1, 1.1, 1],
+              opacity: [0.5, 0.8, 0.5]
+            }}
+            transition={{ 
+              duration: 2,
+              repeat: Infinity,
+              ease: [0.4, 0, 0.6, 1] as const
+            }}
+          />
+        )}
+      </Button>
+
+      {/* Tooltip */}
+      <AnimatePresence>
+        {isHovered && tooltip && !isLoading && (
+          <motion.div
+            className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800/90 backdrop-blur-sm text-white text-xs rounded-lg border border-slate-700/50 whitespace-nowrap"
+            initial={{ opacity: 0, y: 5, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 5, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+          >
+            {tooltip}
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800/90" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
 
 const MeetingControls: FC = () => {
-    const { leaveMeeting } = useMeeting();
-    const {
-        isAudioEnabled, toggleAudio,
-        isVideoEnabled, toggleVideo,
-        shareScreen
-    } = useWebRTC();
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [handRaised, setHandRaised] = useState(false);
+  const [isOperating, setIsOperating] = useState({
+    audio: false,
+    video: false,
+    screen: false,
+    leaving: false
+  });
+  
+  const { 
+    leaveMeeting,
+    isHost,
+    participantCount,
+    canPerformAction
+  } = useMeeting();
+  
+  const {
+    isLocalAudioEnabled, 
+    toggleAudio,
+    isLocalVideoEnabled, 
+    toggleVideo,
+    isScreenSharing,
+    startScreenShare,
+    stopScreenShare,
+    supportedFeatures
+  } = useWebRTC();
 
-    return (
-        <div className="flex justify-center gap-4 py-3 border-t border-gray-200 bg-white dark:bg-gray-800">
-            <Button onClick={toggleAudio} variant="secondary">
-                {isAudioEnabled ? <LucideMic className="w-4 h-4" /> : <LucideMicOff className="w-4 h-4" />}
-            </Button>
-            <Button onClick={toggleVideo} variant="secondary">
-                {isVideoEnabled ? <LucideVideo className="w-4 h-4" /> : <LucideVideoOff className="w-4 h-4" />}
-            </Button>
-            <Button onClick={shareScreen} variant="secondary">
-                <LucideMonitor className="w-4 h-4" />
-            </Button>
-            <Button onClick={leaveMeeting} variant="destructive">
-                <LucideX className="w-4 h-4" />
-            </Button>
+  // Handle audio toggle with loading state
+  const handleToggleAudio = useCallback(async () => {
+    if (isOperating.audio) return;
+
+    setIsOperating(prev => ({ ...prev, audio: true }));
+    try {
+      await toggleAudio();
+    } catch (error) {
+      console.error('Failed to toggle audio:', error);
+      toast.error('Failed to toggle microphone');
+    } finally {
+      setIsOperating(prev => ({ ...prev, audio: false }));
+    }
+  }, [toggleAudio, isOperating.audio]);
+
+  // Handle video toggle with loading state
+  const handleToggleVideo = useCallback(async () => {
+    if (isOperating.video) return;
+
+    setIsOperating(prev => ({ ...prev, video: true }));
+    try {
+      await toggleVideo();
+    } catch (error) {
+      console.error('Failed to toggle video:', error);
+      toast.error('Failed to toggle camera');
+    } finally {
+      setIsOperating(prev => ({ ...prev, video: false }));
+    }
+  }, [toggleVideo, isOperating.video]);
+
+  // Handle screen share with loading state
+  const handleScreenShare = useCallback(async () => {
+    if (isOperating.screen) return;
+
+    if (!supportedFeatures.screenShare) {
+      toast.error('Screen sharing is not supported in this browser');
+      return;
+    }
+
+    if (!canPerformAction('share_screen')) {
+      toast.error('You do not have permission to share screen');
+      return;
+    }
+
+    setIsOperating(prev => ({ ...prev, screen: true }));
+    try {
+      if (isScreenSharing) {
+        await stopScreenShare();
+      } else {
+        await startScreenShare();
+      }
+    } catch (error) {
+      console.error('Failed to toggle screen share:', error);
+      toast.error('Failed to toggle screen sharing');
+    } finally {
+      setIsOperating(prev => ({ ...prev, screen: false }));
+    }
+  }, [
+    isScreenSharing, 
+    startScreenShare, 
+    stopScreenShare, 
+    supportedFeatures.screenShare,
+    canPerformAction,
+    isOperating.screen
+  ]);
+
+  // Handle leave meeting
+  const handleLeave = useCallback(async () => {
+    if (isOperating.leaving) return;
+
+    setIsOperating(prev => ({ ...prev, leaving: true }));
+    try {
+      await leaveMeeting();
+    } catch (error) {
+      console.error('Failed to leave meeting:', error);
+      toast.error('Failed to leave meeting');
+      setIsOperating(prev => ({ ...prev, leaving: false }));
+    }
+  }, [leaveMeeting, isOperating.leaving]);
+
+  // Handle raise hand
+  const handleRaiseHand = useCallback(() => {
+    setHandRaised(prev => !prev);
+    // In a real implementation, this would emit to other participants
+    toast.success(handRaised ? 'Hand lowered' : 'Hand raised');
+  }, [handRaised]);
+
+  // Handle settings
+  const handleSettings = useCallback(() => {
+    setShowMoreOptions(false);
+    // This would open a settings modal
+    toast.success('Settings panel would open here');
+  }, []);
+
+  // Handle camera switch
+  const handleCameraSwitch = useCallback(() => {
+    setShowMoreOptions(false);
+    // This would cycle through available cameras
+    toast.success('Camera switching would happen here');
+  }, []);
+
+  // Handle audio settings
+  const handleAudioSettings = useCallback(() => {
+    setShowMoreOptions(false);
+    // This would open audio device selection
+    toast.success('Audio settings would open here');
+  }, []);
+
+  // Handle share meeting
+  const handleShareMeeting = useCallback(() => {
+    setShowMoreOptions(false);
+    // This would copy meeting link or show sharing options
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      toast.success('Meeting link copied to clipboard');
+    } else {
+      toast.success('Share meeting functionality would open here');
+    }
+  }, []);
+
+  return (
+    <motion.div
+      className="relative"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* Main Control Bar */}
+      <div className="flex justify-center items-center py-4 px-6">
+        <div className="flex items-center gap-3 bg-slate-800/70 backdrop-blur-xl border border-slate-700/50 rounded-2xl px-6 py-3 shadow-2xl">
+          
+          {/* Audio Control */}
+          <ControlButton
+            icon={<Mic className="w-5 h-5" />}
+            activeIcon={<MicOff className="w-5 h-5" />}
+            isActive={!isLocalAudioEnabled}
+            isLoading={isOperating.audio}
+            onClick={handleToggleAudio}
+            variant={isLocalAudioEnabled ? 'secondary' : 'danger'}
+            tooltip={
+              isOperating.audio 
+                ? 'Processing...' 
+                : isLocalAudioEnabled 
+                  ? 'Mute microphone' 
+                  : 'Unmute microphone'
+            }
+          />
+
+          {/* Video Control */}
+          <ControlButton
+            icon={<Video className="w-5 h-5" />}
+            activeIcon={<VideoOff className="w-5 h-5" />}
+            isActive={!isLocalVideoEnabled}
+            isLoading={isOperating.video}
+            onClick={handleToggleVideo}
+            variant={isLocalVideoEnabled ? 'secondary' : 'danger'}
+            tooltip={
+              isOperating.video 
+                ? 'Processing...' 
+                : isLocalVideoEnabled 
+                  ? 'Turn off camera' 
+                  : 'Turn on camera'
+            }
+          />
+
+          {/* Screen Share */}
+          <ControlButton
+            icon={<Monitor className="w-5 h-5" />}
+            activeIcon={<MonitorOff className="w-5 h-5" />}
+            isActive={isScreenSharing}
+            isLoading={isOperating.screen}
+            isEnabled={supportedFeatures.screenShare && canPerformAction('share_screen')}
+            onClick={handleScreenShare}
+            variant="primary"
+            tooltip={
+              !supportedFeatures.screenShare 
+                ? 'Screen sharing not supported'
+                : !canPerformAction('share_screen')
+                  ? 'No permission to share screen'
+                  : isOperating.screen 
+                    ? 'Processing...'
+                    : isScreenSharing 
+                      ? 'Stop sharing' 
+                      : 'Share screen'
+            }
+          />
+
+          {/* Divider */}
+          <div className="w-px h-8 bg-slate-600/50 mx-2" />
+
+          {/* Raise Hand */}
+          <ControlButton
+            icon={<Hand className="w-5 h-5" />}
+            activeIcon={<HandMetal className="w-5 h-5" />}
+            isActive={handRaised}
+            onClick={handleRaiseHand}
+            variant="primary"
+            tooltip={handRaised ? 'Lower hand' : 'Raise hand'}
+          />
+
+          {/* Participants Count */}
+          <ControlButton
+            icon={<Users className="w-5 h-5" />}
+            isActive={false}
+            onClick={() => toast.success('Participants panel would open')}
+            variant="secondary"
+            tooltip="View participants"
+            badge={participantCount}
+          />
+
+          {/* Chat */}
+          <ControlButton
+            icon={<MessageSquare className="w-5 h-5" />}
+            isActive={false}
+            onClick={() => toast.success('Chat panel would open')}
+            variant="secondary"
+            tooltip="Open chat"
+          />
+
+          {/* More Options */}
+          <ControlButton
+            icon={<MoreHorizontal className="w-5 h-5" />}
+            isActive={showMoreOptions}
+            onClick={() => setShowMoreOptions(!showMoreOptions)}
+            variant="secondary"
+            tooltip="More options"
+          />
+
+          {/* Divider */}
+          <div className="w-px h-8 bg-slate-600/50 mx-2" />
+
+          {/* Leave Meeting */}
+          <ControlButton
+            icon={<PhoneOff className="w-5 h-5" />}
+            isActive={false}
+            isLoading={isOperating.leaving}
+            onClick={handleLeave}
+            variant="danger"
+            tooltip={isOperating.leaving ? 'Leaving...' : 'Leave meeting'}
+            className="w-14"
+          />
         </div>
-    );
+      </div>
+
+      {/* Secondary Controls - More Options */}
+      <AnimatePresence>
+        {showMoreOptions && (
+          <motion.div
+            className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-4"
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="flex items-center gap-2 bg-slate-800/80 backdrop-blur-xl border border-slate-700/50 rounded-xl px-4 py-2 shadow-xl">
+              
+              <ControlButton
+                icon={<Settings className="w-4 h-4" />}
+                isActive={false}
+                onClick={handleSettings}
+                variant="secondary"
+                tooltip="Settings"
+                className="h-10 w-10"
+              />
+
+              <ControlButton
+                icon={<Camera className="w-4 h-4" />}
+                isActive={false}
+                onClick={handleCameraSwitch}
+                variant="secondary"
+                tooltip="Switch camera"
+                className="h-10 w-10"
+              />
+
+              <ControlButton
+                icon={<Volume2 className="w-4 h-4" />}
+                isActive={false}
+                onClick={handleAudioSettings}
+                variant="secondary"
+                tooltip="Audio settings"
+                className="h-10 w-10"
+              />
+
+              <ControlButton
+                icon={<Share className="w-4 h-4" />}
+                isActive={false}
+                onClick={handleShareMeeting}
+                variant="secondary"
+                tooltip="Share meeting"
+                className="h-10 w-10"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Background glow effect */}
+      <div className="absolute inset-0 bg-gradient-to-t from-blue-500/5 via-transparent to-transparent pointer-events-none rounded-2xl" />
+    </motion.div>
+  );
 };
 
 export default MeetingControls;

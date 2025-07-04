@@ -95,7 +95,11 @@ export default function LoginPage() {
                 password: data.password,
             };
             
-            await login(credentials);
+            const user = await login(credentials);
+            if (!user) {
+                throw new Error("Login failed. Please check your credentials.");
+            }
+            
             setLoginSuccess(true);
             
             // Add a delay to show success animation

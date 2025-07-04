@@ -154,8 +154,10 @@ export class MeetingService {
     }>
   > {
     try {
-      const { Meeting } = await import("../models/Meeting");
-      const { Participant } = await import("../models/Participant");
+      const [{ Meeting }, { Participant }] = await Promise.all([
+        import("../models/Meeting"),
+        import("../models/Participant"), // ensure schema registered
+      ]);
       const { User } = await import("../models/User");
 
       // Find meeting
