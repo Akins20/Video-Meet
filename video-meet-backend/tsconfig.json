@@ -7,7 +7,7 @@
     "moduleResolution": "node",
     
     /* Node.js Types */
-    "types": ["node", "@types/node"],
+    // "types": ["node", "@types/node"],
     
     /* Emit */
     "outDir": "./dist",
