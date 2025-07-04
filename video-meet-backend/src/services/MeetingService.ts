@@ -569,17 +569,26 @@ export class MeetingService {
    * Generate unique room ID
    */
   private static generateRoomId(): string {
-    // Generate a 9-character alphanumeric room ID (e.g., "ABC-123-XYZ")
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let result = "";
+    // Generate a room ID in format ABC-123-XYZ (3 letters, 3 numbers, 3 letters)
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const numbers = "0123456789";
 
-    for (let i = 0; i < 9; i++) {
-      if (i === 3 || i === 6) {
-        result += "-";
-      } else {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-    }
+    // Generate 3 letters
+    const firstPart = Array.from({ length: 3 }, () =>
+      letters.charAt(Math.floor(Math.random() * letters.length))
+    ).join('');
+
+    // Generate 3 numbers
+    const secondPart = Array.from({ length: 3 }, () =>
+      numbers.charAt(Math.floor(Math.random() * numbers.length))
+    ).join('');
+
+    // Generate 3 letters
+    const thirdPart = Array.from({ length: 3 }, () =>
+      letters.charAt(Math.floor(Math.random() * letters.length))
+    ).join('');
+
+    const result = `${firstPart}-${secondPart}-${thirdPart}`;
     console.log("Generated room ID:", result);
 
     return result;
