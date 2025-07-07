@@ -142,7 +142,8 @@ export interface IMeeting extends BaseDocument {
 }
 
 /**
- * Participant interface - represents a user in a specific meeting
+ * ENHANCED Participant interface - represents a user in a specific meeting
+ * Updated to support enhanced session management and device tracking
  */
 export interface IParticipant extends BaseDocument {
   // References
@@ -169,6 +170,12 @@ export interface IParticipant extends BaseDocument {
   joinedAt: Date;
   leftAt?: Date;
   sessionDuration?: number; // Time spent in meeting (seconds)
+  
+  // *** ENHANCED SESSION TRACKING - NEW FIELDS ***
+  sessionId: string; // Unique session identifier for this specific join
+  deviceId: string; // Unique device identifier (persistent per device)
+  deviceType: 'web' | 'mobile' | 'desktop'; // Device type
+  endReason?: string; // Reason for leaving: 'user_left', 'replaced_by_new_session', 'meeting_ended_by_host', 'session_cleanup_stale'
   
   // Connection information
   socketId?: string; // WebSocket connection ID
@@ -368,6 +375,7 @@ export interface RTCSessionDescriptionInit {
   type: 'offer' | 'answer' | 'pranswer' | 'rollback';
   sdp?: string;
 }
+
 export interface RTCIceCandidateInit {
   candidate?: string;
   sdpMid?: string;
