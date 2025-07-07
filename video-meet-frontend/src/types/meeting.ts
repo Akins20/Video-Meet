@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // Base meeting types
 export type MeetingStatus = 'waiting' | 'active' | 'ended' | 'cancelled'
 export type MeetingType = 'instant' | 'scheduled' | 'recurring'

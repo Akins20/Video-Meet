@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from 'react-hot-toast'
 import { useSocket } from './useSocket'

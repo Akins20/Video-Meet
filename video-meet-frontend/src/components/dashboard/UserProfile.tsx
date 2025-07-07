@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import { FC, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";

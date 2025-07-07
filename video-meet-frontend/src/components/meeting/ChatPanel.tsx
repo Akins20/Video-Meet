@@ -78,8 +78,7 @@ const ChatPanel: FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout>();
-  
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);  
   const currentUser = useSelector((state: RootState) => state.auth.user);
 
   // Auto scroll to bottom

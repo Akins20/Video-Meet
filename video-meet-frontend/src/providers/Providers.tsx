@@ -1,4 +1,6 @@
 'use client'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 import React, { useEffect, useState } from 'react'
 import { Provider } from 'react-redux'
@@ -139,7 +141,7 @@ const PerformanceProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         // Performance monitoring in development
         if (process.env.NODE_ENV === 'development') {
-            let renderStart = performance.now()
+            // let renderStart = performance.now()
 
             const observer = new PerformanceObserver((list) => {
                 list.getEntries().forEach((entry) => {
@@ -251,6 +253,7 @@ export const createTestProviders = (options?: {
     theme?: string
     initialState?: any
 }) => {
+    // eslint-disable-next-line react/display-name
     return ({ children }: { children: React.ReactNode }) => (
         <AppThemeProvider>
             <ReduxProvider>

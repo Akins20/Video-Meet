@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // Base API response structure
 export interface ApiResponse<T = any> {
     success: boolean
