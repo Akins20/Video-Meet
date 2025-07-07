@@ -117,7 +117,6 @@ const MeetingList: FC = () => {
 
     // Helper function to check if current user is the host of a meeting
     const isCurrentUserHost = (meeting: any) => {
-        console.log("Checking host for meeting:", meeting);
         return user?.id === meeting.hostId.id;
     };
 

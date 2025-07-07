@@ -29,7 +29,10 @@ interface JoinMeetingData {
     userAgent: string;
     ipAddress: string;
     deviceType: "web" | "mobile" | "desktop";
+    deviceId?: string; // Unique device identifier
+    sessionId?: string; // Unique session identifier
   };
+  forceJoin?: boolean; // Force join by ending existing sessions
 }
 
 /**
@@ -54,7 +57,7 @@ interface UpdateParticipantData {
 
 /**
  * Meeting Service Class
- * Handles all meeting-related business logic
+ * Handles all meeting-related business logic with enhanced session management
  */
 export class MeetingService {
   /**
@@ -145,18 +148,19 @@ export class MeetingService {
   }
 
   /**
-   * Join a meeting
+   * Join a meeting with enhanced session management
    */
   static async joinMeeting(joinData: JoinMeetingData): Promise<
     APIResponse<{
       meeting: IMeeting;
       participant: IParticipant;
+      replacedSession?: boolean;
     }>
   > {
     try {
       const [{ Meeting }, { Participant }] = await Promise.all([
         import("../models/Meeting"),
-        import("../models/Participant"), // ensure schema registered
+        import("../models/Participant"),
       ]);
       const { User } = await import("../models/User");
 
@@ -180,15 +184,6 @@ export class MeetingService {
           success: false,
           message: "Meeting is locked and not accepting new participants",
           error: { code: "MEETING_LOCKED" },
-        };
-      }
-
-      // Check capacity
-      if (meeting.currentParticipants >= meeting.maxParticipants) {
-        return {
-          success: false,
-          message: "Meeting has reached maximum capacity",
-          error: { code: "MEETING_FULL" },
         };
       }
 
@@ -222,21 +217,128 @@ export class MeetingService {
         user = await User.findById(joinData.userId);
       }
 
-      // Check if user is already in the meeting
+      // Create unique session identifier
+      const sessionId = joinData.deviceInfo?.sessionId || crypto.randomUUID();
+      const deviceId = joinData.deviceInfo?.deviceId || crypto.randomUUID();
+
+      // **ENHANCED SESSION MANAGEMENT**
+      let replacedSession = false;
+
       if (user) {
-        const existingParticipant = await Participant.findOne({
+        // For authenticated users: Check for existing active sessions
+        const existingSessions = await Participant.find({
           meetingId: meeting._id,
           userId: user._id,
           leftAt: { $exists: false },
+        }).sort({ joinedAt: -1 });
+
+        if (existingSessions.length > 0) {
+          if (joinData.forceJoin) {
+            // Force join: End all existing sessions for this user
+            console.log(`Force joining: Ending ${existingSessions.length} existing sessions for user ${user._id}`);
+            
+            const now = new Date();
+            const endSessionPromises = existingSessions.map(async (session) => {
+              const sessionDuration = Math.floor(
+                (now.getTime() - new Date(session.joinedAt).getTime()) / 1000
+              );
+              
+              return Participant.updateOne(
+                { _id: session._id },
+                {
+                  leftAt: now,
+                  sessionDuration: sessionDuration,
+                  endReason: 'replaced_by_new_session'
+                }
+              );
+            });
+
+            await Promise.all(endSessionPromises);
+            
+            // Update meeting participant count
+            meeting.currentParticipants = Math.max(
+              0,
+              meeting.currentParticipants - existingSessions.length
+            );
+            
+            replacedSession = true;
+          } else {
+            // Default behavior: Reject join attempt
+            return {
+              success: false,
+              message: "You are already in this meeting from another device. Use forceJoin=true to replace existing session.",
+              error: { 
+                code: "ALREADY_IN_MEETING",
+                details: {
+                  existingSessions: existingSessions.length,
+                  lastJoinedAt: existingSessions[0].joinedAt,
+                  suggestion: "Set forceJoin=true to replace existing session"
+                }
+              },
+            };
+          }
+        }
+      } else {
+        // For guests: Check by guestName + device info to prevent duplicates
+        const guestName = joinData.guestName || "Guest";
+        
+        const existingGuestSessions = await Participant.find({
+          meetingId: meeting._id,
+          userId: { $exists: false },
+          guestName: guestName,
+          leftAt: { $exists: false },
         });
 
-        if (existingParticipant) {
-          return {
-            success: false,
-            message: "You are already in this meeting",
-            error: { code: "ALREADY_IN_MEETING" },
-          };
+        // Allow multiple guests with same name but different devices
+        // But prevent exact duplicate sessions from same device
+        const sameDeviceSession = existingGuestSessions.find(session => 
+          session.deviceId === deviceId || 
+          (session.ipAddress === joinData.deviceInfo?.ipAddress && 
+           session.userAgent === joinData.deviceInfo?.userAgent)
+        );
+
+        if (sameDeviceSession) {
+          if (joinData.forceJoin) {
+            // End the existing session from same device
+            const now = new Date();
+            const sessionDuration = Math.floor(
+              (now.getTime() - new Date(sameDeviceSession.joinedAt).getTime()) / 1000
+            );
+
+            await Participant.updateOne(
+              { _id: sameDeviceSession._id },
+              {
+                leftAt: now,
+                sessionDuration: sessionDuration,
+                endReason: 'replaced_by_new_session'
+              }
+            );
+
+            meeting.currentParticipants = Math.max(0, meeting.currentParticipants - 1);
+            replacedSession = true;
+          } else {
+            return {
+              success: false,
+              message: "A guest session is already active from this device. Use forceJoin=true to replace it.",
+              error: { 
+                code: "DEVICE_ALREADY_IN_MEETING",
+                details: {
+                  deviceId: sameDeviceSession.deviceId,
+                  joinedAt: sameDeviceSession.joinedAt
+                }
+              },
+            };
+          }
         }
+      }
+
+      // Check capacity after potential session cleanup
+      if (meeting.currentParticipants >= meeting.maxParticipants) {
+        return {
+          success: false,
+          message: "Meeting has reached maximum capacity",
+          error: { code: "MEETING_FULL" },
+        };
       }
 
       // Determine participant role
@@ -247,7 +349,7 @@ export class MeetingService {
         role = "guest";
       }
 
-      // Create participant
+      // Create new participant with enhanced tracking
       const participant = new Participant({
         meetingId: meeting._id,
         userId: user?._id,
@@ -257,6 +359,11 @@ export class MeetingService {
         role,
         permissions: this.getDefaultPermissions(role),
         joinedAt: new Date(),
+        
+        // Enhanced session tracking
+        sessionId: sessionId,
+        deviceId: deviceId,
+        
         mediaState: {
           audioEnabled: !meeting.settings.muteOnJoin,
           videoEnabled: meeting.settings.videoOnJoin,
@@ -267,10 +374,20 @@ export class MeetingService {
           quality: "good",
           lastUpdated: new Date(),
         },
+        
+        // Device information
         ipAddress: joinData.deviceInfo?.ipAddress,
         userAgent: joinData.deviceInfo?.userAgent,
+        deviceType: joinData.deviceInfo?.deviceType || "web",
       });
-      console.log("Participant joining: ", participant)
+
+      console.log("New participant joining:", {
+        userId: user?._id,
+        sessionId,
+        deviceId,
+        replacedSession,
+        displayName: participant.displayName
+      });
 
       await participant.save();
 
@@ -288,10 +405,13 @@ export class MeetingService {
 
       return {
         success: true,
-        message: "Successfully joined meeting",
+        message: replacedSession 
+          ? "Successfully joined meeting (replaced existing session)" 
+          : "Successfully joined meeting",
         data: {
           meeting,
           participant,
+          replacedSession,
         },
       };
     } catch (error) {
@@ -305,11 +425,12 @@ export class MeetingService {
   }
 
   /**
-   * Leave a meeting
+   * Leave a meeting with enhanced cleanup
    */
   static async leaveMeeting(
     meetingId: string,
-    participantId: string
+    participantId: string,
+    reason: string = "user_left"
   ): Promise<APIResponse> {
     try {
       const { Meeting } = await import("../models/Meeting");
@@ -325,11 +446,21 @@ export class MeetingService {
         };
       }
 
-      // Update participant
-      participant.leftAt = new Date();
+      // Check if already left
+      if (participant.leftAt) {
+        return {
+          success: true,
+          message: "Participant already left the meeting",
+        };
+      }
+
+      // Update participant with enhanced tracking
+      const now = new Date();
+      participant.leftAt = now;
       participant.sessionDuration = Math.floor(
-        (participant.leftAt.getTime() - participant.joinedAt.getTime()) / 1000
+        (now.getTime() - participant.joinedAt.getTime()) / 1000
       );
+      participant.endReason = reason;
       await participant.save();
 
       // Update meeting
@@ -354,6 +485,13 @@ export class MeetingService {
         await meeting.save();
       }
 
+      console.log("Participant left:", {
+        participantId,
+        sessionId: participant.sessionId,
+        reason,
+        sessionDuration: participant.sessionDuration
+      });
+
       return {
         success: true,
         message: "Successfully left meeting",
@@ -369,7 +507,7 @@ export class MeetingService {
   }
 
   /**
-   * End a meeting (host only)
+   * End a meeting (host only) with proper session cleanup
    */
   static async endMeeting(
     meetingId: string,
@@ -404,7 +542,7 @@ export class MeetingService {
       );
       await meeting.save();
 
-      // Get all active participants first
+      // Get all active participants
       const activeParticipants = await Participant.find({
         meetingId: meeting._id,
         leftAt: { $exists: false },
@@ -412,20 +550,30 @@ export class MeetingService {
 
       const now = new Date();
 
-      // Update each participant individually with calculated sessionDuration
+      // Update each participant with proper session cleanup
       const updatePromises = activeParticipants.map(participant => {
-        const sessionDuration = Math.floor((now.getTime() - new Date(participant.joinedAt).getTime()) / 1000);
+        const sessionDuration = Math.floor(
+          (now.getTime() - new Date(participant.joinedAt).getTime()) / 1000
+        );
 
         return Participant.updateOne(
           { _id: participant._id },
           {
             leftAt: now,
-            sessionDuration: sessionDuration
+            sessionDuration: sessionDuration,
+            endReason: 'meeting_ended_by_host'
           }
         );
       });
 
       await Promise.all(updatePromises);
+
+      console.log("Meeting ended:", {
+        meetingId,
+        hostId,
+        activeParticipantsCount: activeParticipants.length,
+        duration: meeting.duration
+      });
 
       return {
         success: true,
@@ -440,6 +588,75 @@ export class MeetingService {
       };
     }
   }
+
+  /**
+   * Clean up stale sessions (utility method for maintenance)
+   */
+  static async cleanupStaleSessions(
+    maxInactiveMinutes: number = 30
+  ): Promise<APIResponse> {
+    try {
+      const { Participant } = await import("../models/Participant");
+      const { Meeting } = await import("../models/Meeting");
+
+      const cutoffTime = new Date(Date.now() - maxInactiveMinutes * 60 * 1000);
+
+      // Find stale sessions (joined long ago but no recent activity)
+      const staleSessions = await Participant.find({
+        leftAt: { $exists: false },
+        joinedAt: { $lt: cutoffTime },
+        // Add additional criteria based on your last activity tracking
+      });
+
+      if (staleSessions.length === 0) {
+        return {
+          success: true,
+          message: "No stale sessions found",
+        };
+      }
+
+      const now = new Date();
+      const cleanupPromises = staleSessions.map(async (session) => {
+        const sessionDuration = Math.floor(
+          (now.getTime() - new Date(session.joinedAt).getTime()) / 1000
+        );
+
+        // Update participant
+        await Participant.updateOne(
+          { _id: session._id },
+          {
+            leftAt: now,
+            sessionDuration: sessionDuration,
+            endReason: 'session_cleanup_stale'
+          }
+        );
+
+        // Update meeting participant count
+        await Meeting.updateOne(
+          { _id: session.meetingId },
+          { $inc: { currentParticipants: -1 } }
+        );
+      });
+
+      await Promise.all(cleanupPromises);
+
+      console.log(`Cleaned up ${staleSessions.length} stale sessions`);
+
+      return {
+        success: true,
+        message: `Cleaned up ${staleSessions.length} stale sessions`,
+      };
+    } catch (error) {
+      console.error("Cleanup stale sessions error:", error);
+      return {
+        success: false,
+        message: "Failed to cleanup stale sessions",
+        error: { code: "CLEANUP_FAILED" },
+      };
+    }
+  }
+
+  // ... (rest of the methods remain the same as in original)
 
   /**
    * Update meeting settings
