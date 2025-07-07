@@ -404,21 +404,28 @@ export class MeetingService {
       );
       await meeting.save();
 
-      // Update all active participants
-      await Participant.updateMany(
-        {
-          meetingId: meeting._id,
-          leftAt: { $exists: false },
-        },
-        {
-          leftAt: new Date(),
-          $inc: {
-            sessionDuration: {
-              $divide: [{ $subtract: [new Date(), "$joinedAt"] }, 1000],
-            },
-          },
-        }
-      );
+      // Get all active participants first
+      const activeParticipants = await Participant.find({
+        meetingId: meeting._id,
+        leftAt: { $exists: false },
+      });
+
+      const now = new Date();
+
+      // Update each participant individually with calculated sessionDuration
+      const updatePromises = activeParticipants.map(participant => {
+        const sessionDuration = Math.floor((now.getTime() - new Date(participant.joinedAt).getTime()) / 1000);
+
+        return Participant.updateOne(
+          { _id: participant._id },
+          {
+            leftAt: now,
+            sessionDuration: sessionDuration
+          }
+        );
+      });
+
+      await Promise.all(updatePromises);
 
       return {
         success: true,

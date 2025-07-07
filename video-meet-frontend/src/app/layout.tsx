@@ -7,6 +7,7 @@ import { Providers } from '@/providers/Providers'
 
 // react-hot-toast
 import { Toaster } from 'react-hot-toast'
+import GlobalNavbar from '@/components/GlobalNavbar'
 
 // Font configuration
 const inter = Inter({
@@ -80,6 +81,7 @@ export default function RootLayout({
         "
       >
         <Providers>
+          <GlobalNavbar/>
           <main className="relative min-h-screen">{children}</main>
           <Toaster
             position="top-right"

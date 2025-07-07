@@ -1,10 +1,7 @@
 "use client";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog";
+import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import LoginPage from "@/components/auth/LoginPage";
-import RegisterPage from "@/components/auth/RegisterPage";
 import { 
     Video, 
     Users, 
@@ -114,7 +111,15 @@ const stats = [
 ];
 
 export default function LandingPage() {
-    const [authModal, setAuthModal] = useState<"login" | "register" | null>(null);
+    const router = useRouter();
+
+    const handleGetStarted = () => {
+        router.push('/register');
+    };
+
+    const handleSignIn = () => {
+        router.push('/login');
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden">
@@ -160,11 +165,64 @@ export default function LandingPage() {
                 />
             </div>
 
+            {/* Landing Page Header Navigation */}
+            <motion.header
+                className="relative z-20 bg-slate-900/50 backdrop-blur-md border-b border-slate-700/50"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+            >
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between h-16">
+                        {/* Logo */}
+                        <motion.div
+                            className="flex items-center gap-3"
+                            whileHover={{ scale: 1.05 }}
+                        >
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                <Video className="w-4 h-4 text-white" />
+                            </div>
+                            <span className="text-xl font-bold text-white">Video Meet</span>
+                        </motion.div>
+
+                        {/* Navigation Links */}
+                        <div className="hidden md:flex items-center space-x-8">
+                            <a href="#features" className="text-slate-300 hover:text-white transition-colors">
+                                Features
+                            </a>
+                            <a href="#stats" className="text-slate-300 hover:text-white transition-colors">
+                                About
+                            </a>
+                            <a href="#contact" className="text-slate-300 hover:text-white transition-colors">
+                                Contact
+                            </a>
+                        </div>
+
+                        {/* Auth Buttons */}
+                        <div className="flex items-center gap-4">
+                            <Button
+                                variant="ghost"
+                                onClick={handleSignIn}
+                                className="text-slate-300 hover:text-white hover:bg-slate-700/50"
+                            >
+                                Sign In
+                            </Button>
+                            <Button
+                                onClick={handleGetStarted}
+                                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium px-6"
+                            >
+                                Get Started
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </motion.header>
+
             {/* Main Content */}
             <div className="relative z-10">
                 {/* Hero Section */}
                 <motion.section
-                    className="min-h-screen flex items-center justify-center px-4"
+                    className="min-h-screen flex items-center justify-center px-4 pt-16"
                     variants={containerVariants}
                     initial="hidden"
                     animate="visible"
@@ -215,55 +273,35 @@ export default function LandingPage() {
                                 className="flex flex-col sm:flex-row gap-4 justify-center items-center"
                                 variants={itemVariants}
                             >
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <motion.div
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            <Button
-                                                size="lg"
-                                                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold px-8 py-4 rounded-xl shadow-2xl hover:shadow-blue-500/25 transition-all duration-300 group"
-                                                onClick={() => setAuthModal("register")}
-                                            >
-                                                <Rocket className="w-5 h-5 mr-2 group-hover:animate-pulse" />
-                                                Get Started Free
-                                                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                                            </Button>
-                                        </motion.div>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-2xl w-full bg-transparent border-0 shadow-none p-0">
-                                        <DialogTitle className="text-2xl font-bold text-white mb-4">
-                                            Create Your Video Meet Account
-                                        </DialogTitle>
-                                        <RegisterPage />
-                                    </DialogContent>
-                                </Dialog>
+                                <motion.div
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    <Button
+                                        size="lg"
+                                        onClick={handleGetStarted}
+                                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold px-8 py-4 rounded-xl shadow-2xl hover:shadow-blue-500/25 transition-all duration-300 group"
+                                    >
+                                        <Rocket className="w-5 h-5 mr-2 group-hover:animate-pulse" />
+                                        Get Started Free
+                                        <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                                    </Button>
+                                </motion.div>
 
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <motion.div
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            <Button
-                                                size="lg"
-                                                variant="outline"
-                                                className="bg-slate-800/50 border-slate-600 text-white hover:bg-slate-700 hover:border-slate-500 font-semibold px-8 py-4 rounded-xl backdrop-blur-sm group"
-                                                onClick={() => setAuthModal("login")}
-                                            >
-                                                <Play className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
-                                                Sign In
-                                            </Button>
-                                        </motion.div>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-2xl w-full bg-transparent border-0 shadow-none p-0">
-                                        <DialogTitle className="text-2xl font-bold text-white mb-4">
-                                            Sign In to Video Meet
-                                        </DialogTitle>
-                                        <LoginPage />
-                                    </DialogContent>
-                                </Dialog>
+                                <motion.div
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    <Button
+                                        size="lg"
+                                        variant="outline"
+                                        onClick={handleSignIn}
+                                        className="bg-slate-800/50 border-slate-600 text-white hover:bg-slate-700 hover:border-slate-500 font-semibold px-8 py-4 rounded-xl backdrop-blur-sm group"
+                                    >
+                                        <Play className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+                                        Sign In
+                                    </Button>
+                                </motion.div>
                             </motion.div>
                         </motion.div>
 
@@ -326,6 +364,7 @@ export default function LandingPage() {
 
                 {/* Stats Section */}
                 <motion.section
+                    id="stats"
                     className="py-20 px-4"
                     variants={containerVariants}
                     initial="hidden"
@@ -368,6 +407,7 @@ export default function LandingPage() {
 
                 {/* Features Section */}
                 <motion.section
+                    id="features"
                     className="py-20 px-4"
                     variants={containerVariants}
                     initial="hidden"
@@ -445,30 +485,23 @@ export default function LandingPage() {
                             </motion.p>
                             
                             <motion.div
-                                className="flex flex-col sm:flex-row gap-4 justify-center"
+                                className="flex flex-col sm:flex-row gap-4 justify-center items-center"
                                 variants={itemVariants}
                             >
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <motion.div
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            <Button
-                                                size="lg"
-                                                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold px-8 py-4 rounded-xl shadow-2xl hover:shadow-blue-500/25 transition-all duration-300 group"
-                                                onClick={() => setAuthModal("register")}
-                                            >
-                                                <Zap className="w-5 h-5 mr-2 group-hover:animate-pulse" />
-                                                Start Free Trial
-                                                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                                            </Button>
-                                        </motion.div>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-md bg-transparent border-0 shadow-none">
-                                        <RegisterPage />
-                                    </DialogContent>
-                                </Dialog>
+                                <motion.div
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    <Button
+                                        size="lg"
+                                        onClick={handleGetStarted}
+                                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold px-8 py-4 rounded-xl shadow-2xl hover:shadow-blue-500/25 transition-all duration-300 group"
+                                    >
+                                        <Zap className="w-5 h-5 mr-2 group-hover:animate-pulse" />
+                                        Start Free Trial
+                                        <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                                    </Button>
+                                </motion.div>
 
                                 <motion.div
                                     className="flex items-center gap-2 text-slate-400"
@@ -484,6 +517,7 @@ export default function LandingPage() {
 
                 {/* Footer */}
                 <motion.footer
+                    id="contact"
                     className="py-12 px-4 border-t border-slate-700/50"
                     variants={containerVariants}
                     initial="hidden"
