@@ -1,9 +1,11 @@
-import mongoose, { Schema, Model } from "mongoose";
+import mongoose, { Schema, Model, Document } from "mongoose";
+import crypto from "crypto";
 import { IParticipant } from "../types/models";
 
 /**
- * Participant Schema Definition
- * Represents a user's participation in a specific meeting
+ * Enhanced Participant Schema Definition
+ * Represents a user's participation in a specific meeting with enhanced session management
+ * Fixed TypeScript errors and validation issues
  */
 const ParticipantSchema = new Schema<IParticipant>(
   {
@@ -29,7 +31,7 @@ const ParticipantSchema = new Schema<IParticipant>(
       trim: true,
       maxlength: [100, "Display name cannot exceed 100 characters"],
       validate: {
-        validator: function (name: string) {
+        validator: function (name: string): boolean {
           return name.length >= 1;
         },
         message: "Display name cannot be empty",
@@ -41,7 +43,7 @@ const ParticipantSchema = new Schema<IParticipant>(
       trim: true,
       maxlength: [100, "Guest name cannot exceed 100 characters"],
       validate: {
-        validator: function (guestName: string) {
+        validator: function (this: IParticipant, guestName: string): boolean {
           // Guest name is required if userId is null (guest user)
           if (!this.userId && !guestName) {
             return false;
@@ -55,7 +57,7 @@ const ParticipantSchema = new Schema<IParticipant>(
     avatar: {
       type: String,
       validate: {
-        validator: function (url: string) {
+        validator: function (url: string): boolean {
           if (!url) return true; // Optional field
           return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i.test(url);
         },
@@ -114,7 +116,7 @@ const ParticipantSchema = new Schema<IParticipant>(
       type: Date,
       default: null,
       validate: {
-        validator: function (leftAt: Date) {
+        validator: function (this: IParticipant, leftAt: Date): boolean {
           // leftAt must be after joinedAt
           if (leftAt && this.joinedAt) {
             return leftAt > this.joinedAt;
@@ -129,16 +131,60 @@ const ParticipantSchema = new Schema<IParticipant>(
       type: Number, // Duration in seconds
       default: null,
       min: [0, "Session duration cannot be negative"],
+    },
+
+    // *** ENHANCED SESSION TRACKING - NEW REQUIRED FIELDS ***
+    sessionId: {
+      type: String,
+      required: [true, "Session ID is required"],
+      unique: true, // Ensure session IDs are unique across all participants
+      index: true, // Index for session lookups
+      default: () => crypto.randomUUID(), // Auto-generate if not provided
       validate: {
-        validator: function (duration: number) {
-          // Duration should be set when participant leaves
-          if (this.leftAt && duration === null) {
-            return false;
-          }
-          return true;
+        validator: function (sessionId: string): boolean {
+          return !!(sessionId && sessionId.length >= 10);
         },
-        message: "Session duration is required when participant has left",
+        message: "Session ID must be at least 10 characters long",
       },
+    },
+
+    deviceId: {
+      type: String,
+      required: [true, "Device ID is required"],
+      index: true, // Index for device tracking
+      validate: {
+        validator: function (deviceId: string): boolean {
+          return !!(deviceId && deviceId.length >= 8);
+        },
+        message: "Device ID must be at least 8 characters long",
+      },
+    },
+
+    deviceType: {
+      type: String,
+      enum: {
+        values: ["web", "mobile", "desktop"],
+        message: "Device type must be web, mobile, or desktop",
+      },
+      required: [true, "Device type is required"],
+      default: "web",
+      index: true, // Index for device type queries
+    },
+
+    endReason: {
+      type: String,
+      enum: {
+        values: [
+          "user_left",
+          "replaced_by_new_session", 
+          "meeting_ended_by_host",
+          "session_cleanup_stale",
+          "connection_lost",
+          "kicked_by_moderator"
+        ],
+        message: "Invalid end reason",
+      },
+      default: null,
     },
 
     // Connection information
@@ -152,7 +198,7 @@ const ParticipantSchema = new Schema<IParticipant>(
       type: String,
       default: null,
       validate: {
-        validator: function (peerId: string) {
+        validator: function (peerId: string): boolean {
           if (!peerId) return true;
           // Basic peer ID validation (can be enhanced based on WebRTC library)
           return peerId.length >= 10 && peerId.length <= 50;
@@ -164,7 +210,7 @@ const ParticipantSchema = new Schema<IParticipant>(
     ipAddress: {
       type: String,
       validate: {
-        validator: function (ip: string) {
+        validator: function (ip: string): boolean {
           if (!ip) return true;
           // Basic IP validation (IPv4 and IPv6)
           const ipv4Regex =
@@ -252,7 +298,7 @@ const ParticipantSchema = new Schema<IParticipant>(
 );
 
 /**
- * Indexes for performance optimization
+ * Enhanced indexes for performance optimization and session management
  */
 ParticipantSchema.index({ meetingId: 1, leftAt: 1 }); // Active participants
 ParticipantSchema.index({ userId: 1, joinedAt: -1 }); // User's participation history
@@ -260,11 +306,26 @@ ParticipantSchema.index({ meetingId: 1, role: 1 }); // Participants by role
 ParticipantSchema.index({ socketId: 1 }, { sparse: true }); // Socket lookups
 ParticipantSchema.index({ peerId: 1 }, { sparse: true }); // WebRTC peer lookups
 
-// Compound index for meeting queries
+// *** ENHANCED SESSION MANAGEMENT INDEXES ***
+ParticipantSchema.index({ sessionId: 1 }, { unique: true }); // Unique session lookups
+ParticipantSchema.index({ deviceId: 1, leftAt: 1 }); // Device-based session tracking
+ParticipantSchema.index({ userId: 1, meetingId: 1, leftAt: 1 }); // User active sessions in meetings
+ParticipantSchema.index({ meetingId: 1, deviceId: 1, leftAt: 1 }); // Meeting device sessions
+ParticipantSchema.index({ deviceType: 1, leftAt: 1 }); // Device type tracking
+
+// Compound index for enhanced session queries
 ParticipantSchema.index({
   meetingId: 1,
+  userId: 1,
   leftAt: 1,
   joinedAt: 1,
+});
+
+// Index for stale session cleanup
+ParticipantSchema.index({ 
+  leftAt: 1, 
+  joinedAt: 1,
+  'connectionQuality.lastUpdated': 1
 });
 
 /**
@@ -276,6 +337,28 @@ ParticipantSchema.pre("save", function (next) {
     this.sessionDuration = Math.floor(
       (this.leftAt.getTime() - this.joinedAt.getTime()) / 1000
     );
+  }
+  next();
+});
+
+/**
+ * Pre-save middleware to ensure sessionId uniqueness
+ */
+ParticipantSchema.pre("save", function (next) {
+  // Generate sessionId if not provided
+  if (!this.sessionId) {
+    this.sessionId = crypto.randomUUID();
+  }
+  next();
+});
+
+/**
+ * Pre-save middleware to validate endReason when leaving
+ */
+ParticipantSchema.pre("save", function (next) {
+  // Set endReason to 'user_left' if leftAt is set but no endReason provided
+  if (this.isModified("leftAt") && this.leftAt && !this.endReason) {
+    this.endReason = "user_left";
   }
   next();
 });
@@ -350,7 +433,7 @@ ParticipantSchema.pre("save", function (next) {
  * Pre-save middleware to validate guest user logic
  */
 ParticipantSchema.pre("save", function (next) {
-  // Ensure guest users have guest names and guest role
+  // Ensure guest users have guest names and appropriate roles
   if (!this.userId) {
     if (!this.guestName) {
       return next(new Error("Guest participants must have a guest name"));
@@ -379,61 +462,25 @@ ParticipantSchema.methods.isOnline = function (): boolean {
   }
   return false;
 };
-// (Removed: getDefaultPermissions is now a standalone helper function above)
 
 /**
- * Instance method: Get default permissions based on role
+ * Instance method: Update connection quality
  */
-ParticipantSchema.methods.getDefaultPermissions = function (
-  role: IParticipant["role"]
-): IParticipant["permissions"] {
-  switch (role) {
-    case "host":
-      return {
-        canMuteOthers: true,
-        canRemoveParticipants: true,
-        canManageRecording: true,
-        canShareScreen: true,
-        canShareFiles: true,
-        canUseWhiteboard: true,
-      };
-    case "moderator":
-      return {
-        canMuteOthers: true,
-        canRemoveParticipants: true,
-        canManageRecording: true,
-        canShareScreen: true,
-        canShareFiles: true,
-        canUseWhiteboard: true,
-      };
-    case "participant":
-      return {
-        canMuteOthers: false,
-        canRemoveParticipants: false,
-        canManageRecording: false,
-        canShareScreen: true,
-        canShareFiles: true,
-        canUseWhiteboard: true,
-      };
-    case "guest":
-      return {
-        canMuteOthers: false,
-        canRemoveParticipants: false,
-        canManageRecording: false,
-        canShareScreen: false,
-        canShareFiles: false,
-        canUseWhiteboard: false,
-      };
-    default:
-      return {
-        canMuteOthers: false,
-        canRemoveParticipants: false,
-        canManageRecording: false,
-        canShareScreen: false,
-        canShareFiles: false,
-        canUseWhiteboard: false,
-      };
-  }
+ParticipantSchema.methods.updateConnectionQuality = function (
+  metrics: Partial<IParticipant['connectionQuality']>
+): void {
+  Object.assign(this.connectionQuality, metrics);
+  this.connectionQuality.lastUpdated = new Date();
+  this.markModified('connectionQuality');
+};
+
+/**
+ * Instance method: Check if participant has a specific permission
+ */
+ParticipantSchema.methods.hasPermission = function (
+  permission: keyof IParticipant['permissions']
+): boolean {
+  return this.permissions[permission] || false;
 };
 
 /**
@@ -461,13 +508,149 @@ ParticipantSchema.statics.findBySocketId = function (socketId: string) {
 };
 
 /**
- * Static method: Find participants by peer ID
+ * Static method: Find participant by session ID
  */
-ParticipantSchema.statics.findByPeerId = function (peerId: string) {
+ParticipantSchema.statics.findBySessionId = function (sessionId: string) {
   return this.findOne({
-    peerId,
-    leftAt: { $exists: false },
+    sessionId,
   });
+};
+
+/**
+ * Static method: Find active sessions for a user in a meeting
+ */
+ParticipantSchema.statics.findActiveUserSessions = function (
+  meetingId: string, 
+  userId: string
+) {
+  return this.find({
+    meetingId: new mongoose.Types.ObjectId(meetingId),
+    userId: new mongoose.Types.ObjectId(userId),
+    leftAt: { $exists: false },
+  }).sort({ joinedAt: -1 });
+};
+
+/**
+ * Static method: Find active sessions for a device
+ */
+ParticipantSchema.statics.findActiveDeviceSessions = function (
+  deviceId: string
+) {
+  return this.find({
+    deviceId,
+    leftAt: { $exists: false },
+  }).sort({ joinedAt: -1 });
+};
+
+/**
+ * Static method: Find guest sessions by name and device info
+ */
+ParticipantSchema.statics.findGuestSessions = function (
+  meetingId: string,
+  guestName: string,
+  deviceId?: string,
+  ipAddress?: string,
+  userAgent?: string
+) {
+  const query: any = {
+    meetingId: new mongoose.Types.ObjectId(meetingId),
+    userId: { $exists: false },
+    guestName: guestName,
+    leftAt: { $exists: false },
+  };
+
+  // Add device/connection filters if provided
+  if (deviceId) query.deviceId = deviceId;
+  if (ipAddress) query.ipAddress = ipAddress;
+  if (userAgent) query.userAgent = userAgent;
+
+  return this.find(query).sort({ joinedAt: -1 });
+};
+
+/**
+ * Static method: Find stale sessions for cleanup
+ */
+ParticipantSchema.statics.findStaleSessions = function (
+  maxInactiveMinutes: number = 30
+) {
+  const cutoffTime = new Date(Date.now() - maxInactiveMinutes * 60 * 1000);
+  
+  return this.find({
+    leftAt: { $exists: false },
+    joinedAt: { $lt: cutoffTime },
+    'connectionQuality.lastUpdated': { $lt: cutoffTime }
+  });
+};
+
+/**
+ * Static method: Force end sessions by device ID (for session replacement)
+ */
+ParticipantSchema.statics.forceEndDeviceSessions = function (
+  deviceId: string,
+  endReason: string = 'replaced_by_new_session'
+) {
+  const now = new Date();
+  
+  return this.updateMany(
+    {
+      deviceId,
+      leftAt: { $exists: false },
+    },
+    {
+      $set: {
+        leftAt: now,
+        endReason: endReason,
+      },
+    }
+  );
+};
+
+/**
+ * Static method: Force end user sessions in a meeting (for session replacement)
+ */
+ParticipantSchema.statics.forceEndUserMeetingSessions = function (
+  meetingId: string,
+  userId: string,
+  endReason: string = 'replaced_by_new_session'
+) {
+  const now = new Date();
+  
+  return this.updateMany(
+    {
+      meetingId: new mongoose.Types.ObjectId(meetingId),
+      userId: new mongoose.Types.ObjectId(userId),
+      leftAt: { $exists: false },
+    },
+    {
+      $set: {
+        leftAt: now,
+        endReason: endReason,
+      },
+    }
+  );
+};
+
+/**
+ * Static method: Bulk update session end reasons
+ */
+ParticipantSchema.statics.bulkEndSessions = function (
+  sessionIds: string[],
+  endReason: string = 'session_cleanup_stale'
+) {
+  const now = new Date();
+  
+  return this.updateMany(
+    {
+      sessionId: { $in: sessionIds },
+      leftAt: { $exists: false },
+    },
+    {
+      $set: {
+        leftAt: now,
+        endReason: endReason,
+      },
+    }
+  );
 };
 
 /**
@@ -501,6 +684,12 @@ ParticipantSchema.statics.getMeetingStats = function (meetingId: string) {
         },
         connectionQualityDistribution: {
           $push: "$connectionQuality.quality",
+        },
+        deviceTypeDistribution: {
+          $push: "$deviceType",
+        },
+        endReasonDistribution: {
+          $push: "$endReason",
         },
       },
     },
@@ -549,6 +738,44 @@ ParticipantSchema.statics.getMeetingStats = function (meetingId: string) {
             },
           },
         },
+        deviceDistribution: {
+          $arrayToObject: {
+            $map: {
+              input: { $setUnion: ["$deviceTypeDistribution"] },
+              as: "device",
+              in: {
+                k: "$$device",
+                v: {
+                  $size: {
+                    $filter: {
+                      input: "$deviceTypeDistribution",
+                      cond: { $eq: ["$$this", "$$device"] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        endReasonDistribution: {
+          $arrayToObject: {
+            $map: {
+              input: { $setUnion: ["$endReasonDistribution"] },
+              as: "reason",
+              in: {
+                k: "$$reason",
+                v: {
+                  $size: {
+                    $filter: {
+                      input: "$endReasonDistribution",
+                      cond: { $eq: ["$$this", "$$reason"] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     },
   ]);
@@ -587,14 +814,14 @@ ParticipantSchema.statics.cleanupOldRecords = function (daysOld: number = 90) {
 /**
  * Virtual field: Is participant currently active
  */
-ParticipantSchema.virtual("isActive").get(function () {
+ParticipantSchema.virtual("isActive").get(function (this: IParticipant) {
   return !this.leftAt;
 });
 
 /**
  * Virtual field: Current session duration (for active participants)
  */
-ParticipantSchema.virtual("currentSessionDuration").get(function () {
+ParticipantSchema.virtual("currentSessionDuration").get(function (this: IParticipant) {
   if (this.leftAt) return this.sessionDuration;
   return Math.floor((Date.now() - this.joinedAt.getTime()) / 1000);
 });
@@ -602,7 +829,7 @@ ParticipantSchema.virtual("currentSessionDuration").get(function () {
 /**
  * Virtual field: Connection status indicator
  */
-ParticipantSchema.virtual("connectionStatus").get(function () {
+ParticipantSchema.virtual("connectionStatus").get(function (this: IParticipant) {
   if (this.leftAt) return "offline";
 
   const lastUpdate = this.connectionQuality.lastUpdated;
@@ -612,14 +839,47 @@ ParticipantSchema.virtual("connectionStatus").get(function () {
   return "connected";
 });
 
+/**
+ * Virtual field: Session info summary
+ */
+ParticipantSchema.virtual("sessionInfo").get(function (this: IParticipant) {
+  return {
+    sessionId: this.sessionId,
+    deviceId: this.deviceId,
+    deviceType: this.deviceType,
+    isActive: !this.leftAt,
+    duration: this.leftAt ? this.sessionDuration : (this as any).currentSessionDuration,
+    endReason: this.endReason,
+  };
+});
+
 // Ensure virtual fields are included in JSON output
 ParticipantSchema.set("toJSON", { virtuals: true });
 ParticipantSchema.set("toObject", { virtuals: true });
 
 /**
+ * Interface for static methods (to help with TypeScript)
+ */
+interface IParticipantModel extends Model<IParticipant> {
+  findActiveInMeeting(meetingId: string): any;
+  findBySocketId(socketId: string): any;
+  findBySessionId(sessionId: string): any;
+  findActiveUserSessions(meetingId: string, userId: string): any;
+  findActiveDeviceSessions(deviceId: string): any;
+  findGuestSessions(meetingId: string, guestName: string, deviceId?: string, ipAddress?: string, userAgent?: string): any;
+  findStaleSessions(maxInactiveMinutes?: number): any;
+  forceEndDeviceSessions(deviceId: string, endReason?: string): any;
+  forceEndUserMeetingSessions(meetingId: string, userId: string, endReason?: string): any;
+  bulkEndSessions(sessionIds: string[], endReason?: string): any;
+  getMeetingStats(meetingId: string): any;
+  getUserHistory(userId: string, page?: number, limit?: number): any;
+  cleanupOldRecords(daysOld?: number): any;
+}
+
+/**
  * Create and export the Participant model
  */
-export const Participant: Model<IParticipant> = mongoose.model<IParticipant>(
+export const Participant: IParticipantModel = mongoose.model<IParticipant, IParticipantModel>(
   "Participant",
   ParticipantSchema
 );

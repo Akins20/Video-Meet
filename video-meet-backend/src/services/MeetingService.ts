@@ -349,20 +349,32 @@ export class MeetingService {
         role = "guest";
       }
 
+      // Get user full name safely
+      const getFullName = (user: IUser | null): string => {
+        if (!user) return "";
+        if (typeof user.getFullName === 'function') {
+          return user.getFullName();
+        }
+        return `${user.firstName} ${user.lastName}`.trim();
+      };
+
+      const displayName = user ? getFullName(user) : joinData.guestName || "Guest";
+
       // Create new participant with enhanced tracking
       const participant = new Participant({
         meetingId: meeting._id,
         userId: user?._id,
-        displayName: user ? user.getFullName() : joinData.guestName || "Guest",
-        guestName: user ? user.getFullName() : joinData.guestName || "Guest",
+        displayName: displayName,
+        guestName: !user ? joinData.guestName || "Guest" : undefined,
         avatar: user?.avatar,
         role,
         permissions: this.getDefaultPermissions(role),
         joinedAt: new Date(),
         
-        // Enhanced session tracking
+        // Enhanced session tracking - REQUIRED FIELDS
         sessionId: sessionId,
         deviceId: deviceId,
+        deviceType: joinData.deviceInfo?.deviceType || "web",
         
         mediaState: {
           audioEnabled: !meeting.settings.muteOnJoin,
@@ -378,13 +390,13 @@ export class MeetingService {
         // Device information
         ipAddress: joinData.deviceInfo?.ipAddress,
         userAgent: joinData.deviceInfo?.userAgent,
-        deviceType: joinData.deviceInfo?.deviceType || "web",
       });
 
       console.log("New participant joining:", {
         userId: user?._id,
         sessionId,
         deviceId,
+        deviceType: participant.deviceType,
         replacedSession,
         displayName: participant.displayName
       });
@@ -655,8 +667,6 @@ export class MeetingService {
       };
     }
   }
-
-  // ... (rest of the methods remain the same as in original)
 
   /**
    * Update meeting settings
