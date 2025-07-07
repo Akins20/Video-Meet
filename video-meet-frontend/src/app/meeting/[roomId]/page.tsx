@@ -1,4 +1,3 @@
-// app/meeting/[roomId]/page.tsx
 import { Metadata } from 'next';
 import MeetingRoomPage from '@/components/meeting/MeetingRoomPage';
 

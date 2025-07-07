@@ -15,25 +15,56 @@ export interface CreateMeetingRequest {
     settings?: Partial<MeetingSettings>
 }
 
+// Enhanced JoinMeetingRequest with session management
 export interface JoinMeetingRequest {
     roomId: string
     password?: string
     guestName?: string
     deviceInfo: {
         deviceType: 'web' | 'desktop' | 'mobile'
+        deviceId?: string // Unique device identifier (persistent per device)
+        sessionId?: string // Unique session identifier (per join)
         userAgent: string
+        ipAddress?: string // Will be set by backend if not provided
         capabilities: {
             supportsVideo: boolean
             supportsAudio: boolean
             supportsScreenShare: boolean
         }
+        // Additional device capabilities
+        browserInfo?: {
+            name: string
+            version: string
+            platform: string
+        }
+        screenInfo?: {
+            width: number
+            height: number
+            colorDepth: number
+        }
     }
+    // Session management options
+    forceJoin?: boolean // Force join by ending existing sessions
+    allowMultipleSessions?: boolean // Allow multiple sessions from same user/device
 }
 
+// Enhanced JoinMeetingResponse with session info
 export interface JoinMeetingResponse {
     meeting: Meeting
     participant: MeetingParticipant
     existingParticipants: MeetingParticipant[]
+    // Session management response data
+    sessionInfo?: {
+        sessionId: string
+        deviceId: string
+        replacedSessions?: number
+        sessionToken?: string
+    }
+    warnings?: Array<{
+        code: string
+        message: string
+        details?: any
+    }>
 }
 
 export interface UpdateMeetingRequest {
@@ -99,6 +130,18 @@ export interface MeetingAnalyticsResponse {
             peakBandwidth: number
             dataTransferred: number
         }
+        // Enhanced session analytics
+        sessionBreakdown: {
+            totalSessions: number
+            replacedSessions: number
+            staleCleanups: number
+            deviceTypeDistribution: {
+                web: number
+                desktop: number
+                mobile: number
+            }
+            averageSessionDuration: number
+        }
     }
 }
 
@@ -136,6 +179,119 @@ export interface RecordingResponse {
     fileSize?: number
 }
 
+// Enhanced session management endpoints
+export interface ForceEndSessionRequest {
+    meetingId: string
+    participantId: string
+    reason?: string
+}
+
+export interface CleanupStaleSessionsRequest {
+    maxInactiveMinutes?: number
+}
+
+export interface SessionCleanupResponse {
+    staleSessions: number
+    totalCleaned: number
+    affectedMeetings: string[]
+}
+
+// Device utilities for generating required session data
+export const generateDeviceInfo = async (): Promise<JoinMeetingRequest['deviceInfo']> => {
+    // Generate persistent device ID
+    const generateDeviceId = (): string => {
+        const existing = localStorage.getItem('videomeet_device_id')
+        if (existing) return existing
+        
+        const deviceId = crypto.randomUUID()
+        localStorage.setItem('videomeet_device_id', deviceId)
+        return deviceId
+    }
+
+    // Detect device type
+    const detectDeviceType = (): 'web' | 'desktop' | 'mobile' => {
+        const userAgent = navigator.userAgent.toLowerCase()
+        if (/mobile|android|ios|iphone|ipad/.test(userAgent)) {
+            return 'mobile'
+        }
+        // Detect if running in Electron or similar desktop app
+        if (window.navigator.userAgent.includes('Electron')) {
+            return 'desktop'
+        }
+        return 'web'
+    }
+
+    // Get device capabilities
+    const getCapabilities = async () => {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices()
+            const hasVideo = devices.some(device => device.kind === 'videoinput')
+            const hasAudio = devices.some(device => device.kind === 'audioinput')
+            
+            return {
+                supportsVideo: hasVideo,
+                supportsAudio: hasAudio,
+                supportsScreenShare: !!navigator.mediaDevices.getDisplayMedia,
+            }
+        } catch (error) {
+            console.warn('Could not get device capabilities:', error)
+            return {
+                supportsVideo: true,
+                supportsAudio: true,
+                supportsScreenShare: true,
+            }
+        }
+    }
+
+    // Get browser info
+    const getBrowserInfo = () => {
+        const userAgent = navigator.userAgent
+        let browserName = 'Unknown'
+        let browserVersion = 'Unknown'
+
+        if (userAgent.includes('Chrome')) {
+            browserName = 'Chrome'
+            const match = userAgent.match(/Chrome\/([0-9.]+)/)
+            if (match) browserVersion = match[1]
+        } else if (userAgent.includes('Firefox')) {
+            browserName = 'Firefox'
+            const match = userAgent.match(/Firefox\/([0-9.]+)/)
+            if (match) browserVersion = match[1]
+        } else if (userAgent.includes('Safari')) {
+            browserName = 'Safari'
+            const match = userAgent.match(/Safari\/([0-9.]+)/)
+            if (match) browserVersion = match[1]
+        } else if (userAgent.includes('Edge')) {
+            browserName = 'Edge'
+            const match = userAgent.match(/Edge\/([0-9.]+)/)
+            if (match) browserVersion = match[1]
+        }
+
+        return {
+            name: browserName,
+            version: browserVersion,
+            platform: navigator.platform,
+        }
+    }
+
+    const capabilities = await getCapabilities()
+    const browserInfo = getBrowserInfo()
+
+    return {
+        deviceType: detectDeviceType(),
+        deviceId: generateDeviceId(),
+        sessionId: crypto.randomUUID(),
+        userAgent: navigator.userAgent,
+        capabilities,
+        browserInfo,
+        screenInfo: {
+            width: screen.width,
+            height: screen.height,
+            colorDepth: screen.colorDepth,
+        },
+    }
+}
+
 // Inject meeting endpoints into the main API
 export const meetingApi = api.injectEndpoints({
     endpoints: (builder) => ({
@@ -171,12 +327,42 @@ export const meetingApi = api.injectEndpoints({
             keepUnusedDataFor: 300, // 5 minutes
         }),
 
-        // Join meeting
+        // Enhanced join meeting with session management
         joinMeeting: builder.mutation<ApiResponse<JoinMeetingResponse>, JoinMeetingRequest>({
             query: (data) => ({
                 url: `/meetings/${data.roomId}/join`,
                 method: 'POST',
                 body: data,
+            }),
+            invalidatesTags: (result, error, arg) => [
+                { type: 'Meeting', id: arg.roomId },
+                'Participant',
+            ],
+            ...commonQueryOptions,
+            // Handle session management errors
+            transformErrorResponse: (response: any) => {
+                if (response.data?.error?.code === 'ALREADY_IN_MEETING') {
+                    return {
+                        ...response,
+                        data: {
+                            ...response.data,
+                            meta: {
+                                suggestForceJoin: true,
+                                existingSessions: response.data.error.details?.existingSessions || 0,
+                            },
+                        },
+                    }
+                }
+                return response
+            },
+        }),
+
+        // Join meeting with force (convenience method)
+        forceJoinMeeting: builder.mutation<ApiResponse<JoinMeetingResponse>, Omit<JoinMeetingRequest, 'forceJoin'>>({
+            query: (data) => ({
+                url: `/meetings/${data.roomId}/join`,
+                method: 'POST',
+                body: { ...data, forceJoin: true },
             }),
             invalidatesTags: (result, error, arg) => [
                 { type: 'Meeting', id: arg.roomId },
@@ -209,6 +395,31 @@ export const meetingApi = api.injectEndpoints({
                 'Meeting',
                 'Participant',
             ],
+            ...commonQueryOptions,
+        }),
+
+        // Force end participant session
+        forceEndSession: builder.mutation<ApiResponse<{ message: string }>, ForceEndSessionRequest>({
+            query: ({ meetingId, participantId, reason }) => ({
+                url: `/meetings/${meetingId}/participants/${participantId}/end-session`,
+                method: 'POST',
+                body: { reason: reason || 'forced_by_moderator' },
+            }),
+            invalidatesTags: (result, error, arg) => [
+                { type: 'Meeting', id: arg.meetingId },
+                'Participant',
+            ],
+            ...commonQueryOptions,
+        }),
+
+        // Cleanup stale sessions
+        cleanupStaleSessions: builder.mutation<ApiResponse<SessionCleanupResponse>, CleanupStaleSessionsRequest>({
+            query: (data) => ({
+                url: '/meetings/cleanup-stale-sessions',
+                method: 'POST',
+                body: data,
+            }),
+            invalidatesTags: ['Meeting', 'Participant'],
             ...commonQueryOptions,
         }),
 
@@ -273,10 +484,16 @@ export const meetingApi = api.injectEndpoints({
             },
         }),
 
-        // Get meeting participants
+        // Get meeting participants with session info
         getMeetingParticipants: builder.query<ApiResponse<{
             participants: MeetingParticipant[]
             count: number
+            sessionStats: {
+                totalSessions: number
+                activeSessions: number
+                deviceTypes: Record<string, number>
+                averageSessionDuration: number
+            }
         }>, string>({
             query: (meetingId) => `/meetings/${meetingId}/participants`,
             providesTags: (result, error, meetingId) => [
@@ -435,7 +652,7 @@ export const meetingApi = api.injectEndpoints({
             // pollingInterval: 2000,
         }),
 
-        // Get meeting analytics
+        // Get meeting analytics with session data
         getMeetingAnalytics: builder.query<ApiResponse<MeetingAnalyticsResponse>, string>({
             query: (meetingId) => `/meetings/${meetingId}/analytics`,
             providesTags: (result, error, meetingId) => [
@@ -529,8 +746,11 @@ export const {
     useGetMeetingQuery,
     useLazyGetMeetingQuery,
     useJoinMeetingMutation,
+    useForceJoinMeetingMutation,
     useLeaveMeetingMutation,
     useEndMeetingMutation,
+    useForceEndSessionMutation,
+    useCleanupStaleSessionsMutation,
     useUpdateMeetingMutation,
     useGetMeetingsQuery,
     useLazyGetMeetingsQuery,
@@ -551,6 +771,9 @@ export const {
 
 // Export utilities
 export const meetingApiUtils = {
+    // Generate device info for joining
+    generateDeviceInfo,
+
     // Prefetch meeting data
     prefetchMeeting: (roomId: string) =>
         meetingApi.util.prefetch('getMeeting', roomId, { force: false }),
@@ -580,6 +803,25 @@ export const meetingApiUtils = {
                 Object.assign(draft.data.meeting, updates)
             }
         })
+    },
+
+    // Helper to handle join meeting with automatic device info
+    joinMeetingWithDeviceInfo: async (params: Omit<JoinMeetingRequest, 'deviceInfo'>) => {
+        const deviceInfo = await generateDeviceInfo()
+        return {
+            ...params,
+            deviceInfo,
+        }
+    },
+
+    // Helper to handle force join scenario
+    handleForceJoin: async (params: Omit<JoinMeetingRequest, 'deviceInfo' | 'forceJoin'>) => {
+        const deviceInfo = await generateDeviceInfo()
+        return {
+            ...params,
+            deviceInfo,
+            forceJoin: true,
+        }
     },
 }
 
