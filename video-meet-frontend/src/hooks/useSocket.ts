@@ -9,7 +9,7 @@ import { useAuthState } from '@/store/hooks'
 import { WS_EVENTS, ENV_CONFIG, TIME_CONFIG } from '@/utils/constants'
 
 // Socket connection states
-type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'disabled'
 
 // WebSocket event handler types
 type EventHandler<T = any> = (data: T) => void
@@ -42,296 +42,295 @@ interface UseSocketReturn {
     // Connection health
     ping: () => Promise<number>
     getConnectionQuality: () => 'poor' | 'fair' | 'good' | 'excellent'
+    
+    // Control methods
+    enableSocket: () => void
+    disableSocket: () => void
+    resetConnection: () => void
 }
 
 // Hook configuration options
 interface SocketOptions {
     autoConnect?: boolean
-    reconnection?: boolean
     maxReconnectAttempts?: number
-    reconnectDelay?: number
-    namespace?: string
 }
 
 export const useSocket = (options: SocketOptions = {}): UseSocketReturn => {
     const { user, isAuthenticated } = useAuth()
-    const { accessToken } = useAuthState() // Get access token from Redux auth state
+    const { accessToken } = useAuthState()
 
-    // Configuration with defaults
-    const config = useRef({
-        autoConnect: true,
-        reconnection: true,
-        maxReconnectAttempts: 5,
-        reconnectDelay: 1000,
-        namespace: '',
-        ...options
-    })
+    // Configuration
+    const maxReconnectAttempts = options.maxReconnectAttempts || 3
+    const autoConnect = options.autoConnect !== false // Default true
 
     // State management
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
     const [connectionError, setConnectionError] = useState<string | null>(null)
     const [reconnectAttempts, setReconnectAttempts] = useState(0)
-    const [lastPingTime, setLastPingTime] = useState<number>(0)
+    const [isSocketEnabled, setIsSocketEnabled] = useState(true)
 
-    // Refs for socket and event handlers
+    // Refs
     const socketRef = useRef<Socket | null>(null)
     const eventHandlersRef = useRef<EventMap>({})
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-    const pingIntervalRef = useRef<NodeJS.Timeout | null>(null)
-    const heartbeatTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const isConnectingRef = useRef(false)
+    const hasAttemptedConnection = useRef(false)
 
     // Get current connection status
     const isConnected = connectionStatus === 'connected'
 
     /**
-     * Start heartbeat ping
+     * Enhanced logging
      */
-    const startHeartbeat = useCallback(() => {
-        // Clear existing heartbeat
-        if (pingIntervalRef.current) {
-            clearInterval(pingIntervalRef.current)
-        }
-        if (heartbeatTimeoutRef.current) {
-            clearTimeout(heartbeatTimeoutRef.current)
-        }
-
-        // Start ping interval
-        pingIntervalRef.current = setInterval(() => {
-            if (socketRef.current?.connected) {
-                const startTime = Date.now()
-                
-                socketRef.current.emit('ping', startTime, (response: number) => {
-                    const pingTime = Date.now() - startTime
-                    setLastPingTime(pingTime)
-                })
-
-                // Set timeout for heartbeat response
-                heartbeatTimeoutRef.current = setTimeout(() => {
-                    console.warn('🔌 Socket: Heartbeat timeout')
-                    setConnectionError('Heartbeat timeout')
-                }, TIME_CONFIG.timeouts.webrtcConnection || 10000)
-            }
-        }, TIME_CONFIG.intervals.heartbeat || 30000)
-    }, [])
+    const log = useCallback((action: string, data?: any) => {
+        console.log(`🔌 Socket [${action}]:`, {
+            status: connectionStatus,
+            attempts: reconnectAttempts,
+            isConnecting: isConnectingRef.current,
+            isEnabled: isSocketEnabled,
+            isAuthenticated,
+            hasAttempted: hasAttemptedConnection.current,
+            ...data
+        })
+    }, [connectionStatus, reconnectAttempts, isSocketEnabled, isAuthenticated])
 
     /**
-     * Stop heartbeat ping
+     * Get WebSocket URL - FIXED to always use backend URL
      */
-    const stopHeartbeat = useCallback(() => {
-        if (pingIntervalRef.current) {
-            clearInterval(pingIntervalRef.current)
-            pingIntervalRef.current = null
-        }
-        if (heartbeatTimeoutRef.current) {
-            clearTimeout(heartbeatTimeoutRef.current)
-            heartbeatTimeoutRef.current = null
-        }
-    }, [])
-
-    /**
-     * Handle reconnection logic
-     */
-    const handleReconnect = useCallback(() => {
-        if (reconnectAttempts >= config.current.maxReconnectAttempts) {
-            console.error('🔌 Socket: Max reconnection attempts reached')
-            setConnectionStatus('error')
-            setConnectionError('Maximum reconnection attempts exceeded')
-            return
-        }
-
-        if (!config.current.reconnection) {
-            return
-        }
-
-        const delay = config.current.reconnectDelay * Math.pow(2, reconnectAttempts)
-        console.log(`🔌 Socket: Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1})`)
-
-        setConnectionStatus('reconnecting')
-        setReconnectAttempts(prev => prev + 1)
-
-        reconnectTimeoutRef.current = setTimeout(() => {
-            if (isAuthenticated && user) {
-                initializeSocket()
-            }
-        }, delay)
-    }, [reconnectAttempts, isAuthenticated, user])
+    const getSocketUrl = useCallback(() => {
+        // Always use ENV_CONFIG.wsUrl - it handles the logic correctly
+        const wsUrl = ENV_CONFIG.wsUrl
+        
+        log('URL_CHECK', { 
+            wsUrl,
+            hostname: window.location.hostname,
+            protocol: window.location.protocol,
+            host: window.location.host
+        })
+        
+        return wsUrl
+    }, [log])
 
     /**
      * Initialize socket connection
      */
     const initializeSocket = useCallback(() => {
-        // Prevent multiple simultaneous connection attempts
         if (isConnectingRef.current || socketRef.current?.connected) {
+            log('INIT_SKIPPED', { reason: 'already_connecting_or_connected' })
             return
         }
 
         if (!isAuthenticated || !user) {
-            console.log('🔌 Socket: Not authenticated, skipping connection')
+            log('INIT_SKIPPED', { reason: 'not_authenticated' })
             return
         }
 
-        console.log('🔌 Socket: Initializing connection...')
+        if (!isSocketEnabled) {
+            log('INIT_SKIPPED', { reason: 'socket_disabled' })
+            return
+        }
+
+        log('INIT_START')
         isConnectingRef.current = true
         setConnectionStatus('connecting')
         setConnectionError(null)
 
         try {
-            // Create socket instance
-            const socketUrl = ENV_CONFIG.wsUrl || `${window.location.protocol}//${window.location.host}`
-            const socket = io(socketUrl + config.current.namespace, {
+            const socketUrl = getSocketUrl()
+            
+            const socket = io(socketUrl, {
                 auth: {
                     token: accessToken || '',
                     userId: user.id,
                 },
                 transports: ['websocket', 'polling'],
-                timeout: TIME_CONFIG.timeouts.webrtcConnection || 10000,
+                timeout: 5000, // 5 second timeout
                 forceNew: true,
+                reconnection: false, // We handle our own reconnection
             })
 
-            // Set socket reference
             socketRef.current = socket
 
-            // Connection event handlers
+            // Set up connection timeout
+            const connectionTimeout = setTimeout(() => {
+                if (isConnectingRef.current) {
+                    log('INIT_TIMEOUT')
+                    socket.disconnect()
+                    isConnectingRef.current = false
+                    setConnectionStatus('error')
+                    setConnectionError('Connection timeout - WebSocket server may not be running')
+                    
+                    // Try to reconnect if we haven't hit max attempts
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        setTimeout(() => {
+                            setReconnectAttempts(prev => prev + 1)
+                            initializeSocket()
+                        }, 2000 * (reconnectAttempts + 1)) // Exponential backoff
+                    } else {
+                        log('MAX_ATTEMPTS_REACHED')
+                        setIsSocketEnabled(false)
+                        setConnectionError('WebSocket server unavailable. Continuing without real-time features.')
+                    }
+                }
+            }, 6000)
+
             socket.on('connect', () => {
-                console.log('🔌 Socket: Connected successfully')
+                clearTimeout(connectionTimeout)
+                log('INIT_SUCCESS')
+                
                 isConnectingRef.current = false
                 setConnectionStatus('connected')
                 setConnectionError(null)
                 setReconnectAttempts(0)
-                startHeartbeat()
 
                 // Re-register event handlers
                 Object.entries(eventHandlersRef.current).forEach(([event, handler]) => {
                     socket.on(event, handler)
                 })
+
+                if (reconnectAttempts > 0) {
+                    toast.success('Connection restored')
+                }
             })
 
             socket.on('disconnect', (reason) => {
-                console.log('🔌 Socket: Disconnected:', reason)
+                clearTimeout(connectionTimeout)
+                log('DISCONNECT', { reason })
                 isConnectingRef.current = false
                 setConnectionStatus('disconnected')
-                stopHeartbeat()
 
-                // Handle automatic reconnection
-                if (reason === 'io server disconnect') {
-                    // Server initiated disconnect - don't auto-reconnect
-                    setConnectionError('Server disconnected')
-                } else if (isAuthenticated && config.current.reconnection) {
-                    // Client-side disconnect - attempt reconnection
-                    handleReconnect()
+                if (reason !== 'io server disconnect' && isSocketEnabled && reconnectAttempts < maxReconnectAttempts) {
+                    setTimeout(() => {
+                        setReconnectAttempts(prev => prev + 1)
+                        initializeSocket()
+                    }, 2000 * (reconnectAttempts + 1))
                 }
             })
 
             socket.on('connect_error', (error) => {
-                console.error('🔌 Socket: Connection error:', error.message)
+                clearTimeout(connectionTimeout)
+                log('CONNECT_ERROR', { error: error.message })
                 isConnectingRef.current = false
                 setConnectionStatus('error')
                 setConnectionError(error.message)
 
-                if (isAuthenticated && config.current.reconnection) {
-                    handleReconnect()
+                if (reconnectAttempts < maxReconnectAttempts && isSocketEnabled) {
+                    setTimeout(() => {
+                        setReconnectAttempts(prev => prev + 1)
+                        initializeSocket()
+                    }, 2000 * (reconnectAttempts + 1))
+                } else {
+                    log('GIVING_UP')
+                    setIsSocketEnabled(false)
+                    setConnectionError('Unable to connect to WebSocket server. App will work without real-time features.')
                 }
             })
 
-            socket.on('error', (error) => {
-                console.error('🔌 Socket: Socket error:', error)
-                setConnectionError(error.message || 'Socket error')
-            })
-
-            // Handle pong response
-            socket.on('pong', () => {
-                if (heartbeatTimeoutRef.current) {
-                    clearTimeout(heartbeatTimeoutRef.current)
-                    heartbeatTimeoutRef.current = null
-                }
-            })
-
-        } catch (error) {
-            console.error('🔌 Socket: Failed to initialize:', error)
+        } catch (error: any) {
+            log('INIT_EXCEPTION', { error: error.message })
             isConnectingRef.current = false
             setConnectionStatus('error')
-            setConnectionError('Failed to initialize socket connection')
+            setConnectionError('Failed to initialize socket')
         }
-    }, [isAuthenticated, user, accessToken, startHeartbeat, stopHeartbeat, handleReconnect])
+    }, [isAuthenticated, user, accessToken, isSocketEnabled, reconnectAttempts, maxReconnectAttempts, getSocketUrl, log])
 
     /**
      * Connect to socket server
      */
     const connect = useCallback(() => {
-        if (!isAuthenticated || !user) {
-            console.log('🔌 Socket: Cannot connect - not authenticated')
+        if (!isSocketEnabled) {
+            log('CONNECT_SKIPPED', { reason: 'socket_disabled' })
             return
         }
 
-        if (socketRef.current?.connected) {
-            console.log('🔌 Socket: Already connected')
-            return
-        }
-
+        log('CONNECT_START')
+        hasAttemptedConnection.current = true
         initializeSocket()
-    }, [isAuthenticated, user, initializeSocket])
+    }, [isSocketEnabled, initializeSocket, log])
 
     /**
      * Disconnect from socket server
      */
     const disconnect = useCallback(() => {
-        console.log('🔌 Socket: Disconnecting...')
+        log('DISCONNECT_START')
         isConnectingRef.current = false
-
-        // Stop heartbeat
-        stopHeartbeat()
-
-        // Clear reconnection timeout
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current)
-            reconnectTimeoutRef.current = null
-        }
-
-        // Disconnect socket
+        
         if (socketRef.current) {
             socketRef.current.disconnect()
             socketRef.current = null
         }
 
-        // Reset state
         setConnectionStatus('disconnected')
         setConnectionError(null)
-        setReconnectAttempts(0)
-
-        // Clear event handlers
         eventHandlersRef.current = {}
-    }, [stopHeartbeat])
+    }, [log])
+
+    /**
+     * Enable socket connections
+     */
+    const enableSocket = useCallback(() => {
+        log('ENABLE_SOCKET')
+        setIsSocketEnabled(true)
+        setConnectionError(null)
+        setReconnectAttempts(0)
+        hasAttemptedConnection.current = false
+        
+        if (isAuthenticated && user) {
+            connect()
+        }
+    }, [isAuthenticated, user, connect, log])
+
+    /**
+     * Disable socket connections
+     */
+    const disableSocket = useCallback(() => {
+        log('DISABLE_SOCKET')
+        setIsSocketEnabled(false)
+        disconnect()
+        setConnectionStatus('disabled')
+    }, [disconnect, log])
+
+    /**
+     * Reset connection state
+     */
+    const resetConnection = useCallback(() => {
+        log('RESET_CONNECTION')
+        disconnect()
+        setReconnectAttempts(0)
+        setConnectionError(null)
+        hasAttemptedConnection.current = false
+        
+        if (isSocketEnabled && isAuthenticated && user) {
+            setTimeout(() => connect(), 1000)
+        }
+    }, [disconnect, connect, isSocketEnabled, isAuthenticated, user, log])
 
     /**
      * Emit event to server
      */
     const emit = useCallback(<T = any>(event: string, data?: T) => {
         if (!socketRef.current?.connected) {
-            console.warn(`🔌 Socket: Cannot emit ${event} - not connected`)
+            log('EMIT_FAILED', { event, reason: 'not_connected' })
             return
         }
 
         try {
             socketRef.current.emit(event, data)
-        } catch (error) {
-            console.error(`🔌 Socket: Failed to emit ${event}:`, error)
+            log('EMIT_SUCCESS', { event })
+        } catch (error: any) {
+            log('EMIT_ERROR', { event, error: error.message })
         }
-    }, [])
+    }, [log])
 
     /**
      * Listen for events
      */
     const on = useCallback(<T = any>(event: string, handler: EventHandler<T>) => {
-        // Store handler reference
         eventHandlersRef.current[event] = handler
 
-        // Add listener if socket is connected
-        if (socketRef.current) {
+        if (socketRef.current?.connected) {
             socketRef.current.on(event, handler)
         }
 
-        // Return cleanup function
         return () => {
             delete eventHandlersRef.current[event]
             if (socketRef.current) {
@@ -347,7 +346,6 @@ export const useSocket = (options: SocketOptions = {}): UseSocketReturn => {
         if (handler) {
             delete eventHandlersRef.current[event]
         }
-
         if (socketRef.current) {
             socketRef.current.off(event, handler)
         }
@@ -357,11 +355,9 @@ export const useSocket = (options: SocketOptions = {}): UseSocketReturn => {
      * Listen for event once
      */
     const once = useCallback(<T = any>(event: string, handler: EventHandler<T>) => {
-        if (!socketRef.current) {
-            console.warn(`🔌 Socket: Cannot listen for ${event} - not connected`)
+        if (!socketRef.current?.connected) {
             return
         }
-
         socketRef.current.once(event, handler)
     }, [])
 
@@ -369,22 +365,25 @@ export const useSocket = (options: SocketOptions = {}): UseSocketReturn => {
      * Join a room
      */
     const joinRoom = useCallback((roomId: string) => {
+        log('JOIN_ROOM', { roomId })
         emit(WS_EVENTS.JOIN_MEETING, { roomId })
-    }, [emit])
+    }, [emit, log])
 
     /**
      * Leave a room
      */
     const leaveRoom = useCallback((roomId: string) => {
+        log('LEAVE_ROOM', { roomId })
         emit(WS_EVENTS.LEAVE_MEETING, { roomId })
-    }, [emit])
+    }, [emit, log])
 
     /**
      * Send message to room
      */
     const sendMessage = useCallback((roomId: string, message: any) => {
+        log('SEND_MESSAGE', { roomId })
         emit(WS_EVENTS.CHAT_MESSAGE, { roomId, message })
-    }, [emit])
+    }, [emit, log])
 
     /**
      * Ping server
@@ -397,49 +396,48 @@ export const useSocket = (options: SocketOptions = {}): UseSocketReturn => {
             }
 
             const startTime = Date.now()
+            socketRef.current.emit('ping', startTime)
             
-            socketRef.current.emit('ping', startTime, (response: number) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Ping timeout'))
+            }, 5000)
+
+            socketRef.current.once('pong', () => {
+                clearTimeout(timeout)
                 const pingTime = Date.now() - startTime
                 resolve(pingTime)
             })
-
-            // Timeout after 5 seconds
-            setTimeout(() => {
-                reject(new Error('Ping timeout'))
-            }, 5000)
         })
     }, [])
 
     /**
-     * Get connection quality based on ping
+     * Get connection quality
      */
     const getConnectionQuality = useCallback((): 'poor' | 'fair' | 'good' | 'excellent' => {
         if (!isConnected) return 'poor'
-        if (lastPingTime === 0) return 'good' // Default until first ping
-        if (lastPingTime < 50) return 'excellent'
-        if (lastPingTime < 150) return 'good'
-        if (lastPingTime < 300) return 'fair'
-        return 'poor'
-    }, [isConnected, lastPingTime])
+        return 'good' // Simplified for now
+    }, [isConnected])
 
-    // Auto-connect when authenticated - FIXED: Use ref for config to prevent recreation
+    // Auto-connect effect - SIMPLIFIED and SAFE
     useEffect(() => {
-        const shouldConnect = isAuthenticated && config.current.autoConnect
-        const shouldDisconnect = !isAuthenticated
+        log('AUTO_CONNECT_CHECK', { 
+            shouldTryConnect: autoConnect && isAuthenticated && !hasAttemptedConnection.current && isSocketEnabled 
+        })
 
-        if (shouldConnect && connectionStatus === 'disconnected' && !isConnectingRef.current) {
+        // Only try to connect once when the user is authenticated
+        if (autoConnect && isAuthenticated && !hasAttemptedConnection.current && isSocketEnabled) {
+            log('AUTO_CONNECT_TRIGGERING')
             connect()
-        } else if (shouldDisconnect && connectionStatus !== 'disconnected') {
-            disconnect()
         }
-    }, [isAuthenticated, connectionStatus, connect, disconnect])
+    }, [autoConnect, isAuthenticated, isSocketEnabled]) // Minimal dependencies to prevent loops
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
+            log('CLEANUP_ON_UNMOUNT')
             disconnect()
         }
-    }, [disconnect])
+    }, []) // Empty dependency array to only run on unmount
 
     return {
         // Connection state
@@ -467,6 +465,11 @@ export const useSocket = (options: SocketOptions = {}): UseSocketReturn => {
         // Connection health
         ping,
         getConnectionQuality,
+
+        // Control methods
+        enableSocket,
+        disableSocket,
+        resetConnection,
     }
 }
 

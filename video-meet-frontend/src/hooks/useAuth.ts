@@ -421,7 +421,7 @@ export const useAuth = () => {
     useEffect(() => {
         if (authStatus.isAuthenticated && authStatus.isSessionExpired) {
             toast.error('Session expired. Please login again.')
-            logoutUser(false)
+            logoutUser(true)
         }
     }, [authStatus.isAuthenticated, authStatus.isSessionExpired, logoutUser])
 

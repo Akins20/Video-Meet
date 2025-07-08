@@ -11,7 +11,7 @@ export const APP_CONFIG = {
     documentation: 'https://docs.videomeet.app',
 } as const
 
-// Environment configuration
+// Environment configuration - FIXED VERSION
 export const ENV_CONFIG = {
     isDevelopment: process.env.NODE_ENV === 'development',
     isProduction: process.env.NODE_ENV === 'production',
@@ -19,7 +19,23 @@ export const ENV_CONFIG = {
 
     // API URLs
     apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://video-meet-g90z.onrender.com/api/v1',
-        wsUrl: process.env.NEXT_PUBLIC_WS_URL || 'ws://video-meet-g90z.onrender.com',
+    
+    // WebSocket URL - SIMPLE: Always use backend URL
+    get wsUrl() {
+        // If we have an explicit WebSocket URL from environment, use it
+        if (process.env.NEXT_PUBLIC_WS_URL) {
+            return process.env.NEXT_PUBLIC_WS_URL;
+        }
+        
+        // Simple check: only use localhost if we're actually on localhost
+        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+            return 'ws://localhost:5000';
+        }
+        
+        // For ALL other environments (including GitHub Codespaces, Vercel, etc.)
+        // ALWAYS use the backend URL on Render.com
+        return 'wss://video-meet-g90z.onrender.com';
+    },
 
     // External services
     turnServer: process.env.NEXT_PUBLIC_TURN_SERVER || 'turn:localhost:3478',
@@ -35,6 +51,24 @@ export const ENV_CONFIG = {
     encryptionKey: process.env.NEXT_PUBLIC_ENCRYPTION_KEY || 'default-dev-key',
     sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 } as const
+
+// Debug helper to log environment configuration
+export const logEnvironmentConfig = () => {
+    if (typeof window !== 'undefined' && ENV_CONFIG.isDevelopment) {
+        console.log('🔧 Environment Configuration:', {
+            isDevelopment: ENV_CONFIG.isDevelopment,
+            apiUrl: ENV_CONFIG.apiUrl,
+            wsUrl: ENV_CONFIG.wsUrl,
+            currentLocation: {
+                protocol: window.location.protocol,
+                host: window.location.host,
+                hostname: window.location.hostname,
+            },
+            webSocketProtocol: ENV_CONFIG.wsUrl.startsWith('wss://') ? 'Secure (WSS)' : 'Insecure (WS)',
+        });
+    }
+};
+
 
 // API endpoints
 export const API_ENDPOINTS = {
