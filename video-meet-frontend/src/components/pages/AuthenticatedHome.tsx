@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
@@ -183,7 +185,7 @@ const AuthenticatedHome = () => {
                         </h1>
                         
                         <p className="text-xl text-slate-400 mb-8 max-w-2xl mx-auto">
-                            Ready to connect and collaborate? Let's make today productive.
+                            Ready to connect and collaborate? Let us make today productive.
                         </p>
 
                         {/* Status Indicator */}

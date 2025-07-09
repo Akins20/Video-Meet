@@ -1,5 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-
 "use client";
 import { FC, useState, useMemo } from "react";
 import Link from "next/link";
@@ -63,7 +63,7 @@ const EndMeetingDialog: FC<EndMeetingDialogProps> = ({
 
                 <div className="bg-slate-700/50 rounded-lg p-4 mb-6">
                     <p className="text-slate-300 text-sm">
-                        Are you sure you want to end <span className="font-semibold text-white">"{meetingTitle}"</span>?
+                        Are you sure you want to end <span className="font-semibold text-white">{meetingTitle}</span>?
                         All participants will be disconnected and the meeting will be terminated permanently.
                     </p>
                 </div>

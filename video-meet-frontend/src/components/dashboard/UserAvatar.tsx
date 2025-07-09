@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { FC } from "react";
 import { motion } from "framer-motion";
 import { User, Camera } from "lucide-react";

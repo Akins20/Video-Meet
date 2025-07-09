@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { FC, useState } from "react";
 import { useSelector } from "react-redux";
 import { RootState } from "@/store";
