@@ -80,7 +80,7 @@ const GlobalNavbar: FC = () => {
         {
             id: "meetings",
             label: "Meetings",
-            href: "/dashboard/tab?=meetings",
+            href: "/dashboard?tab=meetings",
             icon: Video,
             badge: activeMeetings > 0 ? activeMeetings.toString() : undefined,
             requiresAuth: true
