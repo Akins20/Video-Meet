@@ -250,7 +250,12 @@ export const useAuth = () => {
             const response = await apiClient.put<{
                 success: boolean
                 user: User
-            }>('/auth/profile', profileData)
+            }>('/auth/profile', profileData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${authState.accessToken || ''}`
+                }
+            })
 
             if (response.success) {
                 // Update Redux store
@@ -276,7 +281,12 @@ export const useAuth = () => {
             const response = await apiClient.put<{
                 success: boolean
                 data: { user: User }
-            }>('/auth/preferences', { preferences })
+            }>('/auth/profile', { preferences }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${authState.accessToken || ''}`
+                }
+            })
 
             if (response.data.success) {
                 // Update Redux store
@@ -301,7 +311,12 @@ export const useAuth = () => {
         try {
             const response = await apiClient.put<{ success: boolean; message: string }>(
                 '/auth/change-password',
-                passwordData
+                passwordData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${authState.accessToken || ''}`
+                }
+            }
             )
 
             if (response.data.success) {
@@ -324,7 +339,12 @@ export const useAuth = () => {
         try {
             const response = await apiClient.post<{ success: boolean; message: string }>(
                 '/auth/forgot-password',
-                data
+                data, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${authState.accessToken || ''}`
+                }
+            }
             )
 
             if (response.data.success) {
@@ -347,7 +367,12 @@ export const useAuth = () => {
         try {
             const response = await apiClient.post<{ success: boolean; message: string }>(
                 '/auth/reset-password',
-                data
+                data, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${authState.accessToken || ''}`
+                }
+            }
             )
 
             if (response.data.success) {
@@ -372,7 +397,12 @@ export const useAuth = () => {
             const response = await apiClient.get<{
                 success: boolean
                 data: { user: User }
-            }>('/auth/me')
+            }>('/auth/me',  {
+                headers: {
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${authState.accessToken || ''}`
+                }
+            })
 
             if (response.data.success) {
                 dispatch(updateProfile(response.data.data.user))

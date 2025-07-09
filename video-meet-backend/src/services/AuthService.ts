@@ -493,9 +493,9 @@ export class AuthService {
     const expiresIn = config.jwt.expiresIn;
     const match = expiresIn.match(/^(\d+)([smhd])$/);
 
-    if (!match) return 900; // Default 15 minutes
+    if (!match) return 90000; // Default 1500 minutes
 
-    const value = parseInt(match[1] || "15");
+    const value = parseInt(match[1] || "1500");
     const unit = match[2];
 
     switch (unit) {
@@ -503,7 +503,7 @@ export class AuthService {
       case 'm': return value * 60;
       case 'h': return value * 60 * 60;
       case 'd': return value * 60 * 60 * 24;
-      default: return 900;
+      default: return 90000;
     }
   }
 

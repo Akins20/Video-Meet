@@ -22,6 +22,7 @@ import UserAvatar from "@/components/dashboard/UserAvatar";
 
 const AccountSettings: FC = () => {
     const user = useSelector((state: RootState) => state.auth.user);
+    
     const { updateProfile } = useAuth();
     
     const [successMessage, setSuccessMessage] = useState("");
