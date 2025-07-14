@@ -4,7 +4,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMeeting } from "@/hooks/useMeeting";
+import { useMeeting } from "@/hooks/meeting/useMeeting";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
@@ -470,7 +470,7 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
                                                 transition={{ duration: 0.2 }}
                                                 className="h-full"
                                             >
-                                                <ChatPanel />
+                                                <ChatPanel meeting={meeting} participants={participants} isInMeeting={isInMeeting} />
                                             </motion.div>
                                         )}
                                     </AnimatePresence>

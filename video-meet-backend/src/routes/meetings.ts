@@ -165,6 +165,7 @@ router.get(
  */
 router.get(
   "/:meetingId/stats",
+  requireAuth,
   requireMeetingParticipant, // Require meeting participant
   MeetingController.getMeetingStats // Get meeting statistics
 );

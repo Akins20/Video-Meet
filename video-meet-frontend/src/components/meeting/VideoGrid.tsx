@@ -3,7 +3,7 @@
 "use client";
 import { FC, useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { useMeeting } from "@/hooks/useMeeting";
+import { useMeeting } from "@/hooks/useMeetingCore";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";

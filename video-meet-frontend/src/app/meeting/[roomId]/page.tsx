@@ -1,6 +1,5 @@
 import { Metadata } from 'next';
 import MeetingRoomPage from '@/components/meeting/MeetingRoomPage';
-import { logEnvironmentConfig } from '@/utils/constants';
 
 interface PageProps {
   params: Promise<{
@@ -26,8 +25,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function MeetingRoom({ params }: PageProps) {
   const { roomId } = await params;
   // Call this in your app initialization to debug WebSocket issues
-  logEnvironmentConfig();
-
+  
   // You can do server-side data fetching here if needed
   // For example, validate the room exists, get initial meeting data, etc.
   

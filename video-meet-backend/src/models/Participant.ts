@@ -176,11 +176,11 @@ const ParticipantSchema = new Schema<IParticipant>(
       enum: {
         values: [
           "user_left",
-          "replaced_by_new_session", 
+          "replaced_by_new_session",
           "meeting_ended_by_host",
           "session_cleanup_stale",
           "connection_lost",
-          "kicked_by_moderator"
+          "kicked_by_moderator",
         ],
         message: "Invalid end reason",
       },
@@ -212,10 +212,15 @@ const ParticipantSchema = new Schema<IParticipant>(
       validate: {
         validator: function (ip: string): boolean {
           if (!ip) return true;
-          // Basic IP validation (IPv4 and IPv6)
+
+          // IPv4 validation
           const ipv4Regex =
             /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-          const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+
+          // Comprehensive IPv6 validation
+          const ipv6Regex =
+            /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^::$|^(?:[0-9a-fA-F]{1,4}:)*::(?:[0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:)*::[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:)+::$|^::(?:[0-9a-fA-F]{1,4}:)+[0-9a-fA-F]{1,4}$/;
+
           return ipv4Regex.test(ip) || ipv6Regex.test(ip);
         },
         message: "Invalid IP address format",
@@ -322,10 +327,10 @@ ParticipantSchema.index({
 });
 
 // Index for stale session cleanup
-ParticipantSchema.index({ 
-  leftAt: 1, 
+ParticipantSchema.index({
+  leftAt: 1,
   joinedAt: 1,
-  'connectionQuality.lastUpdated': 1
+  "connectionQuality.lastUpdated": 1,
 });
 
 /**
@@ -467,18 +472,18 @@ ParticipantSchema.methods.isOnline = function (): boolean {
  * Instance method: Update connection quality
  */
 ParticipantSchema.methods.updateConnectionQuality = function (
-  metrics: Partial<IParticipant['connectionQuality']>
+  metrics: Partial<IParticipant["connectionQuality"]>
 ): void {
   Object.assign(this.connectionQuality, metrics);
   this.connectionQuality.lastUpdated = new Date();
-  this.markModified('connectionQuality');
+  this.markModified("connectionQuality");
 };
 
 /**
  * Instance method: Check if participant has a specific permission
  */
 ParticipantSchema.methods.hasPermission = function (
-  permission: keyof IParticipant['permissions']
+  permission: keyof IParticipant["permissions"]
 ): boolean {
   return this.permissions[permission] || false;
 };
@@ -520,7 +525,7 @@ ParticipantSchema.statics.findBySessionId = function (sessionId: string) {
  * Static method: Find active sessions for a user in a meeting
  */
 ParticipantSchema.statics.findActiveUserSessions = function (
-  meetingId: string, 
+  meetingId: string,
   userId: string
 ) {
   return this.find({
@@ -574,11 +579,11 @@ ParticipantSchema.statics.findStaleSessions = function (
   maxInactiveMinutes: number = 30
 ) {
   const cutoffTime = new Date(Date.now() - maxInactiveMinutes * 60 * 1000);
-  
+
   return this.find({
     leftAt: { $exists: false },
     joinedAt: { $lt: cutoffTime },
-    'connectionQuality.lastUpdated': { $lt: cutoffTime }
+    "connectionQuality.lastUpdated": { $lt: cutoffTime },
   });
 };
 
@@ -587,10 +592,10 @@ ParticipantSchema.statics.findStaleSessions = function (
  */
 ParticipantSchema.statics.forceEndDeviceSessions = function (
   deviceId: string,
-  endReason: string = 'replaced_by_new_session'
+  endReason: string = "replaced_by_new_session"
 ) {
   const now = new Date();
-  
+
   return this.updateMany(
     {
       deviceId,
@@ -611,10 +616,10 @@ ParticipantSchema.statics.forceEndDeviceSessions = function (
 ParticipantSchema.statics.forceEndUserMeetingSessions = function (
   meetingId: string,
   userId: string,
-  endReason: string = 'replaced_by_new_session'
+  endReason: string = "replaced_by_new_session"
 ) {
   const now = new Date();
-  
+
   return this.updateMany(
     {
       meetingId: new mongoose.Types.ObjectId(meetingId),
@@ -635,10 +640,10 @@ ParticipantSchema.statics.forceEndUserMeetingSessions = function (
  */
 ParticipantSchema.statics.bulkEndSessions = function (
   sessionIds: string[],
-  endReason: string = 'session_cleanup_stale'
+  endReason: string = "session_cleanup_stale"
 ) {
   const now = new Date();
-  
+
   return this.updateMany(
     {
       sessionId: { $in: sessionIds },
@@ -821,7 +826,9 @@ ParticipantSchema.virtual("isActive").get(function (this: IParticipant) {
 /**
  * Virtual field: Current session duration (for active participants)
  */
-ParticipantSchema.virtual("currentSessionDuration").get(function (this: IParticipant) {
+ParticipantSchema.virtual("currentSessionDuration").get(function (
+  this: IParticipant
+) {
   if (this.leftAt) return this.sessionDuration;
   return Math.floor((Date.now() - this.joinedAt.getTime()) / 1000);
 });
@@ -829,7 +836,9 @@ ParticipantSchema.virtual("currentSessionDuration").get(function (this: IPartici
 /**
  * Virtual field: Connection status indicator
  */
-ParticipantSchema.virtual("connectionStatus").get(function (this: IParticipant) {
+ParticipantSchema.virtual("connectionStatus").get(function (
+  this: IParticipant
+) {
   if (this.leftAt) return "offline";
 
   const lastUpdate = this.connectionQuality.lastUpdated;
@@ -848,7 +857,9 @@ ParticipantSchema.virtual("sessionInfo").get(function (this: IParticipant) {
     deviceId: this.deviceId,
     deviceType: this.deviceType,
     isActive: !this.leftAt,
-    duration: this.leftAt ? this.sessionDuration : (this as any).currentSessionDuration,
+    duration: this.leftAt
+      ? this.sessionDuration
+      : (this as any).currentSessionDuration,
     endReason: this.endReason,
   };
 });
@@ -866,10 +877,20 @@ interface IParticipantModel extends Model<IParticipant> {
   findBySessionId(sessionId: string): any;
   findActiveUserSessions(meetingId: string, userId: string): any;
   findActiveDeviceSessions(deviceId: string): any;
-  findGuestSessions(meetingId: string, guestName: string, deviceId?: string, ipAddress?: string, userAgent?: string): any;
+  findGuestSessions(
+    meetingId: string,
+    guestName: string,
+    deviceId?: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): any;
   findStaleSessions(maxInactiveMinutes?: number): any;
   forceEndDeviceSessions(deviceId: string, endReason?: string): any;
-  forceEndUserMeetingSessions(meetingId: string, userId: string, endReason?: string): any;
+  forceEndUserMeetingSessions(
+    meetingId: string,
+    userId: string,
+    endReason?: string
+  ): any;
   bulkEndSessions(sessionIds: string[], endReason?: string): any;
   getMeetingStats(meetingId: string): any;
   getUserHistory(userId: string, page?: number, limit?: number): any;
@@ -879,10 +900,10 @@ interface IParticipantModel extends Model<IParticipant> {
 /**
  * Create and export the Participant model
  */
-export const Participant: IParticipantModel = mongoose.model<IParticipant, IParticipantModel>(
-  "Participant",
-  ParticipantSchema
-);
+export const Participant: IParticipantModel = mongoose.model<
+  IParticipant,
+  IParticipantModel
+>("Participant", ParticipantSchema);
 
 // Export default
 export default Participant;

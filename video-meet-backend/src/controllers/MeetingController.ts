@@ -142,6 +142,7 @@ export class MeetingController {
           participant: result.data!.participant,
         },
       };
+      console.log("Meeting joined successfully", response);
 
       res.status(200).json(response);
     }
@@ -185,6 +186,7 @@ export class MeetingController {
         success: true,
         message: "Successfully left meeting",
       };
+      console.log("Meeting left successfully", response);
 
       res.status(200).json(response);
     }
@@ -221,6 +223,7 @@ export class MeetingController {
         success: true,
         message: "Meeting ended successfully",
       };
+      console.log("Meeting ended successfully", response);
 
       res.status(200).json(response);
     }
@@ -263,6 +266,7 @@ export class MeetingController {
         message: "Meeting updated successfully",
         data: { meeting: result.data },
       };
+      console.log("Meeting updated successfully", response);
 
       res.status(200).json(response);
     }
@@ -294,6 +298,7 @@ export class MeetingController {
           count: result.data!.length,
         },
       };
+      console.log("Participants retrieved successfully", response);
 
       res.status(200).json(response);
     }
@@ -323,6 +328,7 @@ export class MeetingController {
         data: { meetings: result.data },
         pagination: result.pagination,
       };
+      console.log("Meetings retrieved successfully", response);
 
       res.status(200).json(response);
     }
@@ -335,11 +341,13 @@ export class MeetingController {
   static getMeetingStats = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { meetingId } = req.params;
-      if (!meetingId) {
+      const roomMeetingId = req?.meetingId || "";
+      if (!meetingId || !roomMeetingId) {
         throw createError.validation("meetingId is required");
       }
+      const validMeetingId = meetingId || roomMeetingId;
       // Call participant service to get meeting statistics
-      const result = await ParticipantService.getMeetingStats(meetingId);
+      const result = await ParticipantService.getMeetingStats(validMeetingId);
 
       if (!result.success) {
         throw createError.internal("Failed to retrieve meeting statistics");
@@ -351,6 +359,7 @@ export class MeetingController {
         message: "Meeting statistics retrieved successfully",
         data: { stats: result.data },
       };
+      console.log("Meeting statistics retrieved successfully", response);
 
       res.status(200).json(response);
     }
@@ -407,6 +416,7 @@ export class MeetingController {
         success: true,
         message: "Participant removed successfully",
       };
+      console.log("Participant removed successfully", response);
 
       res.status(200).json(response);
     }

@@ -11,6 +11,7 @@ export interface AuthenticatedRequest extends Request {
   user?: IUser;
   userId?: string;
   tokenPayload?: ITokenPayload;
+  meetingId?: string;
 }
 
 /**
@@ -34,7 +35,8 @@ export const authenticate = (options: AuthOptions = { required: true }) => {
   ): Promise<void> => {
     try {
       // Extract token from Authorization header
-      const authHeader = req.headers.authorization;
+      const authHeader: any =
+        req.headers.authorization || req.headers.Authorization;
       let token: string | null = null;
 
       if (authHeader) {
@@ -239,47 +241,40 @@ export const requireMeetingParticipant = async (
       return;
     }
 
-    // For guest users (no authentication), we'll need to check differently
-    if (!req.user || !req.userId) {
-      // Check if this is a guest participant by participant ID
-      const participantId = req.params.participantId;
+    // Check if this is a guest participant by participant ID
+    const participantId = req.user?._id;
+    console.log("Participant ID:", participantId);
 
-      if (!participantId) {
-        res.status(401).json({
-          success: false,
-          message: "Authentication or participant ID required",
-          error: { code: "AUTH_OR_PARTICIPANT_ID_REQUIRED" },
-        });
-        return;
-      }
-
-      const { Participant } = await import("../models/Participant");
-      const participant = await Participant.findOne({
-        _id: participantId,
-        meetingId: meetingId,
-        leftAt: { $exists: false },
+    if (!participantId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication or participant ID required",
+        error: { code: "AUTH_OR_PARTICIPANT_ID_REQUIRED" },
       });
-
-      if (!participant) {
-        res.status(403).json({
-          success: false,
-          message: "You are not a participant in this meeting",
-          error: { code: "NOT_MEETING_PARTICIPANT" },
-        });
-        return;
-      }
-
-      (req as any).participant = participant;
-      return next();
+      return;
     }
 
-    // For authenticated users, check participant record
     const { Participant } = await import("../models/Participant");
-    const participant = await Participant.findOne({
-      meetingId: meetingId,
-      userId: req.userId,
-      leftAt: { $exists: false },
+    const { Meeting } = await import("../models/Meeting");
+    const meeting = await Meeting.findOne({
+      roomId: meetingId,
     });
+
+    if (!meeting) {
+      res.status(403).json({
+        success: false,
+        message: "Meeting not found or not active",
+        error: { code: "MEETING_NOT_FOUND_OR_NOT_ACTIVE" },
+      });
+      return;
+    }
+    const participant = await Participant.findOne({
+      _id: participantId,
+      meetingId: meeting._id,
+    });
+
+    console.log("Participant:", participant);
+    console.log("Meeting:", meeting);
 
     if (!participant) {
       res.status(403).json({
@@ -292,6 +287,7 @@ export const requireMeetingParticipant = async (
 
     // Attach participant to request for controller use
     (req as any).participant = participant;
+    (req as any).meetingId = meeting.id;
 
     next();
   } catch (error) {

@@ -5,7 +5,7 @@
 import { FC, useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWebRTC } from "@/hooks/useWebRTC";
-import { useMeeting } from "@/hooks/useMeeting";
+import { useMeeting } from "@/hooks/useMeetingCore";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "react-hot-toast";
 import { 

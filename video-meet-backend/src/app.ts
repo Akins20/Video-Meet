@@ -1,7 +1,7 @@
-import express, { Application, Request, Response, NextFunction } from "express";
+// app.ts - Refactored and modular
+import express, { Application, Request, Response } from "express";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
-import path from "path";
 
 // Models
 import "./models/Meeting";
@@ -10,403 +10,218 @@ import "./models/User";
 
 // Configuration and Database
 import config from "./config";
-import { connectDatabase } from "./config/database";
+import { connectDatabase, disconnectDatabase } from "./config/database";
 
 // Routes
 import apiRoutes from "./routes";
 
 // Middleware
-import {
-  corsMiddleware,
-  securityHeaders,
-  compressionMiddleware,
-  requestSizeLimit,
-  securityLogger,
-  initSecurity,
-} from "./middleware/security";
-import {
-  errorHandler,
-  notFoundHandler,
-  monitorErrors,
-  requestTimeout,
-  handleUnhandledRejection,
-  handleUncaughtException,
-  handleSIGTERM,
-} from "./middleware/errorHandler";
-import { sanitizeInput } from "./middleware/validation";
+import { setupMiddleware } from "./middleware/setup";
+import { setupErrorHandling } from "./middleware/setup";
+
+// Handlers
+import { SocketHandlers } from "./handlers/socketHandlers";
+
+// Constants
+import { WS_EVENTS, SERVER_CONFIG } from "./constants/events";
 
 // Types
 import { APIResponse } from "./types/models";
 
 /**
- * Express Application Class
- * Handles server initialization, middleware setup, and graceful shutdown
+ * Express Application Class - Refactored and Modular
  */
-class VideoMeetApp {
+export class VideoMeetApp {
   public app: Application;
   public server: http.Server;
   public io: SocketIOServer;
+  private socketHandlers: SocketHandlers;
   private isShuttingDown: boolean = false;
 
   constructor() {
     this.app = express();
     this.server = http.createServer(this.app);
-    this.io = new SocketIOServer(this.server, {
+    this.io = this.createSocketIOServer();
+    this.socketHandlers = new SocketHandlers(this.io);
+
+    this.initialize();
+  }
+
+  /**
+   * Create and configure Socket.IO server
+   */
+  private createSocketIOServer(): SocketIOServer {
+    return new SocketIOServer(this.server, {
       cors: {
         origin: config.security.corsOrigins,
         methods: ["GET", "POST"],
         credentials: true,
       },
-      pingTimeout: 60000,
-      pingInterval: 25000,
+
+      // Connection settings aligned with frontend
+      pingTimeout: SERVER_CONFIG.SOCKET_IO.PING_TIMEOUT,
+      pingInterval: SERVER_CONFIG.SOCKET_IO.PING_INTERVAL,
+      upgradeTimeout: SERVER_CONFIG.SOCKET_IO.UPGRADE_TIMEOUT,
+      connectTimeout: SERVER_CONFIG.SOCKET_IO.CONNECT_TIMEOUT,
+
+      // Transport configuration for stability
+      transports: ["websocket", "polling"],
+      allowUpgrades: true,
+
+      // Security
+      allowEIO3: false,
+      serveClient: false,
+
+      // Message size
+      maxHttpBufferSize: SERVER_CONFIG.SOCKET_IO.MAX_HTTP_BUFFER_SIZE,
+
+      // Additional stability
+      cookie: false,
+      destroyUpgrade: false,
+      destroyUpgradeTimeout: 1000,
     });
+  }
 
-    this.initializeMiddleware();
-    this.initializeRoutes();
-    this.initializeErrorHandling();
-    this.initializeSocketIO();
+  /**
+   * Initialize all components
+   */
+  private initialize(): void {
+    console.log("🔧 Initializing Video Meet API Server...");
+
+    this.setupMiddleware();
+    this.setupRoutes();
+    this.setupErrorHandling();
+    this.setupSocketIO();
     this.setupGracefulShutdown();
+
+    console.log("✅ Server initialization completed");
   }
 
   /**
-   * Initialize Express middleware
+   * Set up middleware
    */
-  private initializeMiddleware(): void {
-    console.log("🔧 Initializing middleware...");
-
-    // Trust proxy for deployment behind load balancers
-    this.app.set("trust proxy", 1);
-
-    // Security middleware (first layer)
-    this.app.use(securityHeaders); // Security headers via Helmet
-    this.app.use(corsMiddleware); // CORS configuration
-    this.app.use(requestSizeLimit); // Request size limiting
-    this.app.use(requestTimeout(30000)); // 30-second request timeout
-
-    // Request processing middleware
-    this.app.use(compressionMiddleware); // Gzip compression
-    this.app.use(express.json({ limit: "10mb" })); // JSON body parser
-    this.app.use(express.urlencoded({ extended: true, limit: "10mb" })); // URL-encoded parser
-    this.app.use(sanitizeInput); // Input sanitization
-
-    // Logging and monitoring
-    this.app.use(securityLogger); // Security event logging
-    this.app.use(monitorErrors); // Error monitoring
-
-    // Static files (if needed)
-    if (config.nodeEnv === "development") {
-      this.app.use(
-        "/uploads",
-        express.static(path.join(process.cwd(), "uploads"))
-      );
-    }
-
-    console.log("✅ Middleware initialized");
+  private setupMiddleware(): void {
+    console.log("🔧 Setting up middleware...");
+    setupMiddleware(this.app);
+    console.log("✅ Middleware setup completed");
   }
 
   /**
-   * Initialize API routes
+   * Set up routes
    */
-  private initializeRoutes(): void {
-    console.log("🛣️  Initializing routes...");
+  private setupRoutes(): void {
+    console.log("🛣️  Setting up routes...");
 
-    // API routes with versioning
+    // API routes
     this.app.use("/api/v1", apiRoutes);
 
     // Root endpoint
-    this.app.get("/", (req: Request, res: Response) => {
-      const response: APIResponse = {
-        success: true,
-        message: "Video Meet API Server",
-        data: {
-          version: "2.0.0",
-          documentation: "/api/v1",
-          health: "/api/v1/health",
-          status: "online",
-          timestamp: new Date().toISOString(),
-        },
-      };
-      res.status(200).json(response);
-    });
+    this.app.get("/", this.handleRootEndpoint.bind(this));
 
-    // Health check endpoint (for load balancers)
-    this.app.get("/health", (req: Request, res: Response) => {
-      if (this.isShuttingDown) {
-        res.status(503).json({
-          success: false,
-          message: "Server is shutting down",
-          error: { code: "SERVER_SHUTTING_DOWN" },
-        });
-        return;
-      }
+    // Health check endpoint
+    this.app.get("/health", this.handleHealthCheck.bind(this));
 
-      const response: APIResponse = {
-        success: true,
-        message: "Server is healthy",
-        data: {
-          status: "healthy",
-          uptime: process.uptime(),
-          timestamp: new Date().toISOString(),
-        },
-      };
-      res.status(200).json(response);
-    });
-
-    console.log("✅ Routes initialized");
+    console.log("✅ Routes setup completed");
   }
 
   /**
-   * Initialize error handling
+   * Handle root endpoint
    */
-  private initializeErrorHandling(): void {
-    console.log("🚨 Initializing error handling...");
-
-    // 404 handler (must be after all routes)
-    this.app.use(notFoundHandler);
-
-    // Global error handler (must be last)
-    this.app.use(errorHandler);
-
-    // Global exception handlers
-    handleUnhandledRejection();
-    handleUncaughtException();
-
-    console.log("✅ Error handling initialized");
+  private handleRootEndpoint(req: Request, res: Response): void {
+    const response: APIResponse = {
+      success: true,
+      message: "Video Meet API Server",
+      data: {
+        version: "2.0.0",
+        documentation: "/api/v1",
+        health: "/health",
+        status: "online",
+        timestamp: new Date().toISOString(),
+      },
+    };
+    res.status(200).json(response);
   }
 
   /**
-   * Initialize Socket.IO for real-time communication
+   * Handle health check endpoint
    */
-  private initializeSocketIO(): void {
-    console.log("🔌 Initializing Socket.IO...");
+  private handleHealthCheck(req: Request, res: Response): void {
+    if (this.isShuttingDown) {
+      res.status(503).json({
+        success: false,
+        message: "Server is shutting down",
+        error: { code: "SERVER_SHUTTING_DOWN" },
+      });
+      return;
+    }
 
-    // Socket.IO middleware for authentication
-    this.io.use(async (socket, next) => {
-      try {
-        const token =
-          socket.handshake.auth.token || socket.handshake.headers.authorization;
+    const response: APIResponse = {
+      success: true,
+      message: "Server is healthy",
+      data: {
+        status: "healthy",
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        connections: this.socketHandlers.getConnectionStats(),
+      },
+    };
+    res.status(200).json(response);
+  }
 
-        if (!token) {
-          return next(new Error("Authentication token required"));
-        }
+  /**
+   * Set up error handling
+   */
+  private setupErrorHandling(): void {
+    console.log("🚨 Setting up error handling...");
+    setupErrorHandling(this.app);
+    console.log("✅ Error handling setup completed");
+  }
 
-        // Verify JWT token
-        const AuthService = (await import("./services/AuthService")).default;
-        const decoded = await AuthService.verifyAccessToken(token);
+  /**
+   * Set up Socket.IO
+   */
+  private setupSocketIO(): void {
+    console.log("🔌 Setting up Socket.IO...");
 
-        if (!decoded) {
-          return next(new Error("Invalid authentication token"));
-        }
+    // Set up authentication middleware
+    this.socketHandlers.setupAuthMiddleware();
 
-        // Attach user info to socket
-        (socket as any).userId = decoded.userId;
-        (socket as any).userEmail = decoded.email;
-
-        console.log(`🔌 User ${decoded.email} connected to Socket.IO`);
-        next();
-      } catch (error) {
-        console.error("Socket.IO authentication error:", error);
-        next(new Error("Authentication failed"));
-      }
-    });
-
-    // Socket.IO connection handling
+    // Handle connections
     this.io.on("connection", (socket) => {
-      const userId = (socket as any).userId;
-      const userEmail = (socket as any).userEmail;
-
-      console.log(`✅ Socket.IO connection established for user: ${userEmail}`);
-
-      // Join user to their personal room
-      socket.join(`user:${userId}`);
-
-      // Handle meeting join
-      socket.on("join-meeting", async (data) => {
-        try {
-          const { meetingId, participantId } = data;
-
-          // Validate meeting participation
-          const ParticipantService = (
-            await import("./services/ParticipantService")
-          ).default;
-          const result = await ParticipantService.getParticipant(participantId);
-
-          if (
-            result.success &&
-            result.data?.meetingId.toString() === meetingId
-          ) {
-            socket.join(`meeting:${meetingId}`);
-
-            // Update participant socket ID
-            await ParticipantService.updateSocketId(participantId, socket.id);
-
-            // Notify other participants
-            socket.to(`meeting:${meetingId}`).emit("participant-joined", {
-              participantId,
-              userId,
-              timestamp: new Date().toISOString(),
-            });
-
-            console.log(`📹 User ${userEmail} joined meeting ${meetingId}`);
-          } else {
-            socket.emit("error", { message: "Invalid meeting or participant" });
-          }
-        } catch (error) {
-          console.error("Join meeting error:", error);
-          socket.emit("error", { message: "Failed to join meeting" });
-        }
-      });
-
-      // Handle meeting leave
-      socket.on("leave-meeting", async (data) => {
-        try {
-          const { meetingId, participantId } = data;
-
-          socket.leave(`meeting:${meetingId}`);
-
-          // Notify other participants
-          socket.to(`meeting:${meetingId}`).emit("participant-left", {
-            participantId,
-            userId,
-            timestamp: new Date().toISOString(),
-          });
-
-          console.log(`👋 User ${userEmail} left meeting ${meetingId}`);
-        } catch (error) {
-          console.error("Leave meeting error:", error);
-        }
-      });
-
-      // Handle WebRTC signaling
-      socket.on("webrtc-signal", (data) => {
-        try {
-          const { to, signal, type } = data;
-
-          // Forward signal to target participant
-          socket.to(to).emit("webrtc-signal", {
-            from: socket.id,
-            signal,
-            type,
-            timestamp: new Date().toISOString(),
-          });
-
-          console.log(`📡 WebRTC ${type} signal from ${socket.id} to ${to}`);
-        } catch (error) {
-          console.error("WebRTC signaling error:", error);
-          socket.emit("error", { message: "Signaling failed" });
-        }
-      });
-
-      // Handle chat messages
-      socket.on("chat-message", async (data) => {
-        try {
-          const { meetingId, message, type = "text" } = data;
-
-          // Broadcast message to meeting participants
-          this.io.to(`meeting:${meetingId}`).emit("chat-message", {
-            senderId: userId,
-            senderEmail: userEmail,
-            message,
-            type,
-            timestamp: new Date().toISOString(),
-          });
-
-          console.log(
-            `💬 Chat message in meeting ${meetingId} from ${userEmail}`
-          );
-        } catch (error) {
-          console.error("Chat message error:", error);
-        }
-      });
-
-      // Handle media state changes
-      socket.on("media-state-change", (data) => {
-        try {
-          const { meetingId, mediaState } = data;
-
-          // Broadcast media state change to meeting participants
-          socket.to(`meeting:${meetingId}`).emit("media-state-change", {
-            participantId: (socket as any).participantId,
-            userId,
-            mediaState,
-            timestamp: new Date().toISOString(),
-          });
-
-          console.log(
-            `🎥 Media state change in meeting ${meetingId} from ${userEmail}`
-          );
-        } catch (error) {
-          console.error("Media state change error:", error);
-        }
-      });
-
-      // Handle connection quality updates
-      socket.on("connection-quality", (data) => {
-        try {
-          const { meetingId, quality } = data;
-
-          // Broadcast quality update to meeting participants
-          socket.to(`meeting:${meetingId}`).emit("connection-quality", {
-            participantId: (socket as any).participantId,
-            userId,
-            quality,
-            timestamp: new Date().toISOString(),
-          });
-        } catch (error) {
-          console.error("Connection quality error:", error);
-        }
-      });
-
-      // Handle disconnection
-      socket.on("disconnect", (reason) => {
-        console.log(`🔌 User ${userEmail} disconnected: ${reason}`);
-
-        // Notify all rooms that this user left
-        socket.broadcast.emit("user-disconnected", {
-          userId,
-          socketId: socket.id,
-          reason,
-          timestamp: new Date().toISOString(),
-        });
-      });
-
-      // Handle errors
-      socket.on("error", (error) => {
-        console.error(`Socket.IO error for user ${userEmail}:`, error);
-      });
+      this.socketHandlers.handleConnection(socket as any);
     });
 
-    console.log("✅ Socket.IO initialized");
+    console.log("✅ Socket.IO setup completed");
   }
 
   /**
-   * Setup graceful shutdown handling
+   * Set up graceful shutdown handlers
    */
   private setupGracefulShutdown(): void {
     const gracefulShutdown = (signal: string) => {
-      return () => {
+      return async () => {
         console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
         this.isShuttingDown = true;
 
-        // Stop accepting new connections
+        // Notify all connected clients
+        this.socketHandlers.broadcastSystemMessage(
+          "Server is shutting down",
+          "warning"
+        );
+
+        // Close HTTP server
         this.server.close(async () => {
           console.log("📡 HTTP server closed");
 
           try {
-            // Close Socket.IO connections
+            // Close Socket.IO server
             this.io.close(() => {
               console.log("🔌 Socket.IO server closed");
             });
 
-            // Close database connection
-            const { disconnectDatabase } = await import("./config/database");
+            // Disconnect database
             await disconnectDatabase();
             console.log("🗄️  Database connection closed");
-
-            // Cleanup error monitor
-            const { errorMonitor } = await import("./middleware/errorHandler");
-            errorMonitor.cleanup();
-            console.log("📊 Error monitor cleaned up");
 
             console.log("✅ Graceful shutdown completed");
             process.exit(0);
@@ -416,18 +231,17 @@ class VideoMeetApp {
           }
         });
 
-        // Force close after 10 seconds
+        // Force close after timeout
         setTimeout(() => {
           console.error("⚠️  Forced shutdown after timeout");
           process.exit(1);
-        }, 10000);
+        }, SERVER_CONFIG.SHUTDOWN_TIMEOUT);
       };
     };
 
-    // Handle different termination signals
     process.on("SIGTERM", gracefulShutdown("SIGTERM"));
     process.on("SIGINT", gracefulShutdown("SIGINT"));
-    process.on("SIGUSR2", gracefulShutdown("SIGUSR2")); // Nodemon restart
+    process.on("SIGUSR2", gracefulShutdown("SIGUSR2"));
   }
 
   /**
@@ -439,56 +253,93 @@ class VideoMeetApp {
       console.log(`📊 Environment: ${config.nodeEnv}`);
       console.log(`🔧 Node.js version: ${process.version}`);
 
-      // Initialize security
-      initSecurity();
-
       // Connect to database
       console.log("🗄️  Connecting to database...");
       await connectDatabase();
 
-      // Start HTTP server
+      // Start listening
       const port = config.port;
-      this.server.listen(port, () => {
-        console.log("\n" + "=".repeat(50));
-        console.log("🎉 VIDEO MEET API SERVER STARTED");
-        console.log("=".repeat(50));
-        console.log(`🌐 Server running on port: ${port}`);
-        console.log(`📡 API endpoint: http://localhost:${port}/api/v1`);
-        console.log(`🔌 Socket.IO endpoint: http://localhost:${port}`);
-        console.log(`💚 Health check: http://localhost:${port}/health`);
-        console.log(`📊 Statistics: http://localhost:${port}/api/v1/stats`);
-        console.log("=".repeat(50));
+      await new Promise<void>((resolve, reject) => {
+        this.server.listen(port, () => {
+          resolve();
+        });
 
-        if (config.nodeEnv === "development") {
-          console.log("🛠️  Development features enabled:");
-          console.log("   • Detailed error messages");
-          console.log("   • Request logging");
-          console.log("   • Static file serving");
-          console.log("=".repeat(50));
-        }
+        this.server.on("error", (error: NodeJS.ErrnoException) => {
+          reject(this.handleServerError(error, port));
+        });
       });
 
-      // Handle server errors
-      this.server.on("error", (error: NodeJS.ErrnoException) => {
-        if (error.syscall !== "listen") {
-          throw error;
-        }
-
-        switch (error.code) {
-          case "EACCES":
-            console.error(`❌ Port ${port} requires elevated privileges`);
-            process.exit(1);
-          case "EADDRINUSE":
-            console.error(`❌ Port ${port} is already in use`);
-            process.exit(1);
-          default:
-            throw error;
-        }
-      });
+      this.logServerStarted(port);
     } catch (error) {
       console.error("❌ Failed to start server:", error);
       process.exit(1);
     }
+  }
+
+  /**
+   * Handle server startup errors
+   */
+  private handleServerError(error: NodeJS.ErrnoException, port: number): Error {
+    if (error.syscall !== "listen") {
+      return error;
+    }
+
+    switch (error.code) {
+      case "EACCES":
+        return new Error(`Port ${port} requires elevated privileges`);
+      case "EADDRINUSE":
+        return new Error(`Port ${port} is already in use`);
+      default:
+        return error;
+    }
+  }
+
+  /**
+   * Log server startup success
+   */
+  private logServerStarted(port: number): void {
+    console.log("\n" + "=".repeat(60));
+    console.log("🎉 VIDEO MEET API SERVER STARTED");
+    console.log("=".repeat(60));
+    console.log(`🌐 Server running on port: ${port}`);
+    console.log(`📡 API endpoint: http://localhost:${port}/api/v1`);
+    console.log(`🔌 Socket.IO endpoint: http://localhost:${port}`);
+    console.log(`💚 Health check: http://localhost:${port}/health`);
+    console.log(
+      `📊 WebSocket events: ${Object.keys(WS_EVENTS).length} events configured`
+    );
+    console.log("=".repeat(60));
+
+    if (config.nodeEnv === "development") {
+      console.log("🛠️  Development features enabled:");
+      console.log("   • Detailed error messages");
+      console.log("   • Request logging");
+      console.log("   • Static file serving");
+      console.log("   • Enhanced debugging");
+      console.log("=".repeat(60));
+    }
+  }
+
+  /**
+   * Get server statistics
+   */
+  public getStats() {
+    return {
+      uptime: process.uptime(),
+      connections: this.socketHandlers.getConnectionStats(),
+      isShuttingDown: this.isShuttingDown,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Broadcast system message to all clients
+   */
+  public broadcastMessage(
+    message: string,
+    type: "info" | "warning" | "error" = "info"
+  ): void {
+    this.socketHandlers.broadcastSystemMessage(message, type);
   }
 }
 
@@ -504,4 +355,3 @@ if (require.main === module) {
 }
 
 export default app;
-export { VideoMeetApp };

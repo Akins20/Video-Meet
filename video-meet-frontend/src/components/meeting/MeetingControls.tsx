@@ -25,7 +25,7 @@ import {
   Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMeeting } from "@/hooks/useMeeting";
+import { useMeeting } from "@/hooks/useMeetingCore";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { toast } from "react-hot-toast";
 

@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useMeeting } from "@/hooks/useMeeting";
+import { useMeeting } from "@/hooks/useMeetingCore";
 import { toast } from "react-hot-toast";
 import { 
   Settings, 

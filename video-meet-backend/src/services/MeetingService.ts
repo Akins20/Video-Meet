@@ -163,6 +163,7 @@ export class MeetingService {
         import("../models/Participant"),
       ]);
       const { User } = await import("../models/User");
+      console.log("joinMeeting", joinData);
 
       // Find meeting
       const meeting = await Meeting.findOne({
@@ -235,45 +236,48 @@ export class MeetingService {
         if (existingSessions.length > 0) {
           if (joinData.forceJoin) {
             // Force join: End all existing sessions for this user
-            console.log(`Force joining: Ending ${existingSessions.length} existing sessions for user ${user._id}`);
-            
+            console.log(
+              `Force joining: Ending ${existingSessions.length} existing sessions for user ${user._id}`
+            );
+
             const now = new Date();
             const endSessionPromises = existingSessions.map(async (session) => {
               const sessionDuration = Math.floor(
                 (now.getTime() - new Date(session.joinedAt).getTime()) / 1000
               );
-              
+
               return Participant.updateOne(
                 { _id: session._id },
                 {
                   leftAt: now,
                   sessionDuration: sessionDuration,
-                  endReason: 'replaced_by_new_session'
+                  endReason: "replaced_by_new_session",
                 }
               );
             });
 
             await Promise.all(endSessionPromises);
-            
+
             // Update meeting participant count
             meeting.currentParticipants = Math.max(
               0,
               meeting.currentParticipants - existingSessions.length
             );
-            
+
             replacedSession = true;
           } else {
             // Default behavior: Reject join attempt
             return {
               success: false,
-              message: "You are already in this meeting from another device. Use forceJoin=true to replace existing session.",
-              error: { 
+              message:
+                "You are already in this meeting from another device. Use forceJoin=true to replace existing session.",
+              error: {
                 code: "ALREADY_IN_MEETING",
                 details: {
                   existingSessions: existingSessions.length,
                   lastJoinedAt: existingSessions[0].joinedAt,
-                  suggestion: "Set forceJoin=true to replace existing session"
-                }
+                  suggestion: "Set forceJoin=true to replace existing session",
+                },
               },
             };
           }
@@ -281,7 +285,7 @@ export class MeetingService {
       } else {
         // For guests: Check by guestName + device info to prevent duplicates
         const guestName = joinData.guestName || "Guest";
-        
+
         const existingGuestSessions = await Participant.find({
           meetingId: meeting._id,
           userId: { $exists: false },
@@ -291,10 +295,11 @@ export class MeetingService {
 
         // Allow multiple guests with same name but different devices
         // But prevent exact duplicate sessions from same device
-        const sameDeviceSession = existingGuestSessions.find(session => 
-          session.deviceId === deviceId || 
-          (session.ipAddress === joinData.deviceInfo?.ipAddress && 
-           session.userAgent === joinData.deviceInfo?.userAgent)
+        const sameDeviceSession = existingGuestSessions.find(
+          (session) =>
+            session.deviceId === deviceId ||
+            (session.ipAddress === joinData.deviceInfo?.ipAddress &&
+              session.userAgent === joinData.deviceInfo?.userAgent)
         );
 
         if (sameDeviceSession) {
@@ -302,7 +307,8 @@ export class MeetingService {
             // End the existing session from same device
             const now = new Date();
             const sessionDuration = Math.floor(
-              (now.getTime() - new Date(sameDeviceSession.joinedAt).getTime()) / 1000
+              (now.getTime() - new Date(sameDeviceSession.joinedAt).getTime()) /
+                1000
             );
 
             await Participant.updateOne(
@@ -310,22 +316,26 @@ export class MeetingService {
               {
                 leftAt: now,
                 sessionDuration: sessionDuration,
-                endReason: 'replaced_by_new_session'
+                endReason: "replaced_by_new_session",
               }
             );
 
-            meeting.currentParticipants = Math.max(0, meeting.currentParticipants - 1);
+            meeting.currentParticipants = Math.max(
+              0,
+              meeting.currentParticipants - 1
+            );
             replacedSession = true;
           } else {
             return {
               success: false,
-              message: "A guest session is already active from this device. Use forceJoin=true to replace it.",
-              error: { 
+              message:
+                "A guest session is already active from this device. Use forceJoin=true to replace it.",
+              error: {
                 code: "DEVICE_ALREADY_IN_MEETING",
                 details: {
                   deviceId: sameDeviceSession.deviceId,
-                  joinedAt: sameDeviceSession.joinedAt
-                }
+                  joinedAt: sameDeviceSession.joinedAt,
+                },
               },
             };
           }
@@ -352,13 +362,15 @@ export class MeetingService {
       // Get user full name safely
       const getFullName = (user: IUser | null): string => {
         if (!user) return "";
-        if (typeof user.getFullName === 'function') {
+        if (typeof user.getFullName === "function") {
           return user.getFullName();
         }
         return `${user.firstName} ${user.lastName}`.trim();
       };
 
-      const displayName = user ? getFullName(user) : joinData.guestName || "Guest";
+      const displayName = user
+        ? getFullName(user)
+        : joinData.guestName || "Guest";
 
       // Create new participant with enhanced tracking
       const participant = new Participant({
@@ -370,12 +382,12 @@ export class MeetingService {
         role,
         permissions: this.getDefaultPermissions(role),
         joinedAt: new Date(),
-        
+
         // Enhanced session tracking - REQUIRED FIELDS
         sessionId: sessionId,
         deviceId: deviceId,
         deviceType: joinData.deviceInfo?.deviceType || "web",
-        
+
         mediaState: {
           audioEnabled: !meeting.settings.muteOnJoin,
           videoEnabled: meeting.settings.videoOnJoin,
@@ -386,7 +398,7 @@ export class MeetingService {
           quality: "good",
           lastUpdated: new Date(),
         },
-        
+
         // Device information
         ipAddress: joinData.deviceInfo?.ipAddress,
         userAgent: joinData.deviceInfo?.userAgent,
@@ -398,7 +410,7 @@ export class MeetingService {
         deviceId,
         deviceType: participant.deviceType,
         replacedSession,
-        displayName: participant.displayName
+        displayName: participant.displayName,
       });
 
       await participant.save();
@@ -417,8 +429,8 @@ export class MeetingService {
 
       return {
         success: true,
-        message: replacedSession 
-          ? "Successfully joined meeting (replaced existing session)" 
+        message: replacedSession
+          ? "Successfully joined meeting (replaced existing session)"
           : "Successfully joined meeting",
         data: {
           meeting,
@@ -490,7 +502,7 @@ export class MeetingService {
           meeting.duration = Math.floor(
             (meeting.endedAt.getTime() -
               (meeting.startedAt?.getTime() || meeting.createdAt.getTime())) /
-            1000
+              1000
           );
         }
 
@@ -501,7 +513,7 @@ export class MeetingService {
         participantId,
         sessionId: participant.sessionId,
         reason,
-        sessionDuration: participant.sessionDuration
+        sessionDuration: participant.sessionDuration,
       });
 
       return {
@@ -550,7 +562,7 @@ export class MeetingService {
       meeting.duration = Math.floor(
         (meeting.endedAt.getTime() -
           (meeting.startedAt?.getTime() || meeting.createdAt.getTime())) /
-        1000
+          1000
       );
       await meeting.save();
 
@@ -563,7 +575,7 @@ export class MeetingService {
       const now = new Date();
 
       // Update each participant with proper session cleanup
-      const updatePromises = activeParticipants.map(participant => {
+      const updatePromises = activeParticipants.map((participant) => {
         const sessionDuration = Math.floor(
           (now.getTime() - new Date(participant.joinedAt).getTime()) / 1000
         );
@@ -573,7 +585,7 @@ export class MeetingService {
           {
             leftAt: now,
             sessionDuration: sessionDuration,
-            endReason: 'meeting_ended_by_host'
+            endReason: "meeting_ended_by_host",
           }
         );
       });
@@ -584,7 +596,7 @@ export class MeetingService {
         meetingId,
         hostId,
         activeParticipantsCount: activeParticipants.length,
-        duration: meeting.duration
+        duration: meeting.duration,
       });
 
       return {
@@ -639,7 +651,7 @@ export class MeetingService {
           {
             leftAt: now,
             sessionDuration: sessionDuration,
-            endReason: 'session_cleanup_stale'
+            endReason: "session_cleanup_stale",
           }
         );
 
@@ -813,17 +825,17 @@ export class MeetingService {
     // Generate 3 letters
     const firstPart = Array.from({ length: 3 }, () =>
       letters.charAt(Math.floor(Math.random() * letters.length))
-    ).join('');
+    ).join("");
 
     // Generate 3 numbers
     const secondPart = Array.from({ length: 3 }, () =>
       numbers.charAt(Math.floor(Math.random() * numbers.length))
-    ).join('');
+    ).join("");
 
     // Generate 3 letters
     const thirdPart = Array.from({ length: 3 }, () =>
       letters.charAt(Math.floor(Math.random() * letters.length))
-    ).join('');
+    ).join("");
 
     const result = `${firstPart}-${secondPart}-${thirdPart}`;
     console.log("Generated room ID:", result);
