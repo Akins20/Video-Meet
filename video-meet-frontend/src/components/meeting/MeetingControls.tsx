@@ -25,7 +25,7 @@ import {
   Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMeeting } from "@/hooks/useMeetingCore";
+import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { toast } from "react-hot-toast";
 
@@ -212,17 +212,14 @@ const MeetingControls: FC = () => {
     isHost,
     participantCount,
     canPerformAction
-  } = useMeeting();
+  } = useMeetingCore();
   
   const {
-    isLocalAudioEnabled, 
+    mediaState,
     toggleAudio,
-    isLocalVideoEnabled, 
     toggleVideo,
-    isScreenSharing,
     startScreenShare,
-    stopScreenShare,
-    supportedFeatures
+    stopScreenShare
   } = useWebRTC();
 
   // Handle audio toggle with loading state
@@ -259,7 +256,8 @@ const MeetingControls: FC = () => {
   const handleScreenShare = useCallback(async () => {
     if (isOperating.screen) return;
 
-    if (!supportedFeatures.screenShare) {
+    // Check if screen sharing is supported
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
       toast.error('Screen sharing is not supported in this browser');
       return;
     }
@@ -271,7 +269,7 @@ const MeetingControls: FC = () => {
 
     setIsOperating(prev => ({ ...prev, screen: true }));
     try {
-      if (isScreenSharing) {
+      if (mediaState.screenSharing) {
         await stopScreenShare();
       } else {
         await startScreenShare();
@@ -283,10 +281,9 @@ const MeetingControls: FC = () => {
       setIsOperating(prev => ({ ...prev, screen: false }));
     }
   }, [
-    isScreenSharing, 
+    mediaState.screenSharing, 
     startScreenShare, 
     stopScreenShare, 
-    supportedFeatures.screenShare,
     canPerformAction,
     isOperating.screen
   ]);
@@ -360,14 +357,14 @@ const MeetingControls: FC = () => {
           <ControlButton
             icon={<Mic className="w-5 h-5" />}
             activeIcon={<MicOff className="w-5 h-5" />}
-            isActive={!isLocalAudioEnabled}
+            isActive={!mediaState.audioEnabled}
             isLoading={isOperating.audio}
             onClick={handleToggleAudio}
-            variant={isLocalAudioEnabled ? 'secondary' : 'danger'}
+            variant={mediaState.audioEnabled ? 'secondary' : 'danger'}
             tooltip={
               isOperating.audio 
                 ? 'Processing...' 
-                : isLocalAudioEnabled 
+                : mediaState.audioEnabled 
                   ? 'Mute microphone' 
                   : 'Unmute microphone'
             }
@@ -377,14 +374,14 @@ const MeetingControls: FC = () => {
           <ControlButton
             icon={<Video className="w-5 h-5" />}
             activeIcon={<VideoOff className="w-5 h-5" />}
-            isActive={!isLocalVideoEnabled}
+            isActive={!mediaState.videoEnabled}
             isLoading={isOperating.video}
             onClick={handleToggleVideo}
-            variant={isLocalVideoEnabled ? 'secondary' : 'danger'}
+            variant={mediaState.videoEnabled ? 'secondary' : 'danger'}
             tooltip={
               isOperating.video 
                 ? 'Processing...' 
-                : isLocalVideoEnabled 
+                : mediaState.videoEnabled 
                   ? 'Turn off camera' 
                   : 'Turn on camera'
             }
@@ -394,19 +391,19 @@ const MeetingControls: FC = () => {
           <ControlButton
             icon={<Monitor className="w-5 h-5" />}
             activeIcon={<MonitorOff className="w-5 h-5" />}
-            isActive={isScreenSharing}
+            isActive={mediaState.screenSharing}
             isLoading={isOperating.screen}
-            isEnabled={supportedFeatures.screenShare && canPerformAction('share_screen')}
+            isEnabled={canPerformAction('share_screen')}
             onClick={handleScreenShare}
             variant="primary"
             tooltip={
-              !supportedFeatures.screenShare 
+              !navigator.mediaDevices?.getDisplayMedia 
                 ? 'Screen sharing not supported'
                 : !canPerformAction('share_screen')
                   ? 'No permission to share screen'
                   : isOperating.screen 
                     ? 'Processing...'
-                    : isScreenSharing 
+                    : mediaState.screenSharing 
                       ? 'Stop sharing' 
                       : 'Share screen'
             }

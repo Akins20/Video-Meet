@@ -5,7 +5,7 @@ import { FC, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useAuth } from "@/hooks/useAuth";
-import { useMeeting } from "@/hooks/useMeetingCore";
+import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -86,13 +86,8 @@ const tabVariants = {
 const SettingsPanel: FC = () => {
   // Hooks
   const { user, updatePreferences } = useAuth();
-  const { meeting } = useMeeting();
+  const { meeting } = useMeetingCore();
   const {
-    availableDevices,
-    currentDevices,
-    switchCamera,
-    switchMicrophone,
-    switchSpeaker,
     mediaState,
     initializeMedia,
     error: webrtcError
@@ -159,17 +154,10 @@ const SettingsPanel: FC = () => {
     }
   }, [user]);
 
-  // Update selected devices when current devices change
-  useEffect(() => {
-    if (currentDevices.camera) setSelectedVideo(currentDevices.camera);
-    if (currentDevices.microphone) setSelectedAudio(currentDevices.microphone);
-    if (currentDevices.speaker) setSelectedSpeaker(currentDevices.speaker);
-  }, [currentDevices]);
-
-  // Get device arrays from availableDevices
-  const audioDevices = availableDevices.filter(device => device.kind === 'audioinput');
-  const videoDevices = availableDevices.filter(device => device.kind === 'videoinput');
-  const speakerDevices = availableDevices.filter(device => device.kind === 'audiooutput');
+  // Mock device arrays for now - these would come from navigator.mediaDevices.enumerateDevices()
+  const audioDevices: DeviceInfo[] = [];
+  const videoDevices: DeviceInfo[] = [];
+  const speakerDevices: DeviceInfo[] = [];
 
   // Cleanup function for test streams
   const cleanupTestStream = useCallback(() => {
@@ -270,39 +258,21 @@ const SettingsPanel: FC = () => {
     }
   }, [isTestingMic, selectedAudio, cleanupTestStream]);
 
-  // Handle device changes
+  // Handle device changes - simplified for now
   const handleCameraChange = useCallback(async (deviceId: string) => {
     setSelectedVideo(deviceId);
-    try {
-      await switchCamera(deviceId);
-      toast.success('Camera switched successfully');
-    } catch (error) {
-      console.error('Failed to switch camera:', error);
-      toast.error('Failed to switch camera');
-    }
-  }, [switchCamera]);
+    toast.success('Camera selection saved');
+  }, []);
 
   const handleMicrophoneChange = useCallback(async (deviceId: string) => {
     setSelectedAudio(deviceId);
-    try {
-      await switchMicrophone(deviceId);
-      toast.success('Microphone switched successfully');
-    } catch (error) {
-      console.error('Failed to switch microphone:', error);
-      toast.error('Failed to switch microphone');
-    }
-  }, [switchMicrophone]);
+    toast.success('Microphone selection saved');
+  }, []);
 
   const handleSpeakerChange = useCallback(async (deviceId: string) => {
     setSelectedSpeaker(deviceId);
-    try {
-      await switchSpeaker(deviceId);
-      toast.success('Speaker switched successfully');
-    } catch (error) {
-      console.error('Failed to switch speaker:', error);
-      toast.error('Failed to switch speaker');
-    }
-  }, [switchSpeaker]);
+    toast.success('Speaker selection saved');
+  }, []);
 
   // Save settings
   const saveSettings = useCallback(async () => {

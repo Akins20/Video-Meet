@@ -5,7 +5,7 @@
 import { FC, useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWebRTC } from "@/hooks/useWebRTC";
-import { useMeeting } from "@/hooks/useMeetingCore";
+import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "react-hot-toast";
 import { 
@@ -144,11 +144,10 @@ const LocalVideo: FC<LocalVideoProps> = ({
 
   // Hooks
   const { user } = useAuth();
-  const { meeting } = useMeeting();
+  const { meeting } = useMeetingCore();
   const { 
     localStream, 
-    isLocalVideoEnabled,
-    isLocalAudioEnabled,
+    mediaState,
     toggleVideo, 
     toggleAudio,
     error: webrtcError,
@@ -175,7 +174,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
   useEffect(() => {
     if (!videoRef.current) return;
 
-    if (localStream && isLocalVideoEnabled) {
+    if (localStream && mediaState.videoEnabled) {
       try {
         videoRef.current.srcObject = localStream;
         setHasVideoError(false);
@@ -199,7 +198,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
       videoRef.current.srcObject = null;
       setHasVideoError(false);
     }
-  }, [localStream, isLocalVideoEnabled]);
+  }, [localStream, mediaState.videoEnabled]);
 
   // Handle video element errors
   useEffect(() => {
@@ -344,7 +343,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
       );
     }
 
-    if (!isLocalVideoEnabled) {
+    if (!mediaState.videoEnabled) {
       return (
         <motion.div
           className="text-center"
@@ -492,7 +491,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
           <div className="flex items-center gap-1">
             <motion.div
               className={`p-1.5 rounded-lg backdrop-blur-sm transition-colors ${
-                isLocalAudioEnabled 
+                mediaState.audioEnabled 
                   ? 'bg-green-500/80 text-white' 
                   : 'bg-red-500/80 text-white'
               }`}
@@ -501,7 +500,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
             >
               {isTogglingMedia.audio ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
-              ) : isLocalAudioEnabled ? (
+              ) : mediaState.audioEnabled ? (
                 <Mic className="w-3 h-3" />
               ) : (
                 <MicOff className="w-3 h-3" />
@@ -510,7 +509,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
 
             <motion.div
               className={`p-1.5 rounded-lg backdrop-blur-sm transition-colors ${
-                isLocalVideoEnabled 
+                mediaState.videoEnabled 
                   ? 'bg-blue-500/80 text-white' 
                   : 'bg-gray-500/80 text-white'
               }`}
@@ -519,7 +518,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
             >
               {isTogglingMedia.video ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
-              ) : isLocalVideoEnabled ? (
+              ) : mediaState.videoEnabled ? (
                 <Camera className="w-3 h-3" />
               ) : (
                 <CameraOff className="w-3 h-3" />
@@ -559,7 +558,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
                   >
                     {isTogglingMedia.video ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : isLocalVideoEnabled ? (
+                    ) : mediaState.videoEnabled ? (
                       <Camera className="w-4 h-4" />
                     ) : (
                       <CameraOff className="w-4 h-4" />
@@ -576,7 +575,7 @@ const LocalVideo: FC<LocalVideoProps> = ({
                   >
                     {isTogglingMedia.audio ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : isLocalAudioEnabled ? (
+                    ) : mediaState.audioEnabled ? (
                       <Mic className="w-4 h-4" />
                     ) : (
                       <MicOff className="w-4 h-4" />

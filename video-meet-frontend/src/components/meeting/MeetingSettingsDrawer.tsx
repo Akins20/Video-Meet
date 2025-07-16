@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useMeeting } from "@/hooks/useMeetingCore";
+import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { toast } from "react-hot-toast";
 import { 
   Settings, 
@@ -95,10 +95,9 @@ const MeetingSettingsDrawer: FC = () => {
     meeting,
     isHost,
     isInMeeting,
-    updateMeetingSettings,
     isLoading: meetingLoading,
     error: meetingError 
-  } = useMeeting();
+  } = useMeetingCore();
   
   const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("general");
@@ -195,21 +194,29 @@ const MeetingSettingsDrawer: FC = () => {
     
     try {
       // Update meeting settings using the hook
+      // TODO: Implement updateMeetingSettings function
+      toast.error("Meeting settings update not implemented yet");
+      return;
+      
+      /*
       const result = await updateMeetingSettings({
-        // title: data.title,
-        // description: data.description,
+        title: data.title,
+        description: data.description,
         maxParticipants: data.maxParticipants,
-        // settings: data.settings,
+        settings: data.settings,
         // Only include password if it's provided
         ...(data.password && { password: data.password })
       });
+      */
 
+      /*
       if (result.success) {
         toast.success("Meeting settings updated successfully!");
         setIsOpen(false);
       } else {
         toast.error(result.error || "Failed to update meeting settings");
       }
+      */
     } catch (error) {
       console.error("Failed to update meeting:", error);
       toast.error("An unexpected error occurred");

@@ -11,6 +11,9 @@ interface AuthenticatedSocket extends Socket {
 }
 
 export class SocketHandlers {
+  // Participant to socket mapping for WebRTC signaling
+  private participantSocketMap: Map<string, string> = new Map();
+  
   constructor(private io: SocketIOServer) {}
 
   /**
@@ -120,7 +123,11 @@ export class SocketHandlers {
         // Join meeting room
         socket.join(`meeting:${actualRoomId}`);
         socket.currentMeetingId = actualRoomId;
-        socket.participantId = participantId || userId;
+        const finalParticipantId = participantId || userId;
+        socket.participantId = finalParticipantId;
+        
+        // Add participant to socket mapping for WebRTC signaling
+        this.participantSocketMap.set(finalParticipantId, socket.id);
 
         // Create participant object
         const participant = {
@@ -168,6 +175,11 @@ export class SocketHandlers {
 
         if (actualMeetingId) {
           socket.leave(`meeting:${actualMeetingId}`);
+          
+          // Remove participant from socket mapping
+          if (actualParticipantId) {
+            this.participantSocketMap.delete(actualParticipantId);
+          }
 
           // Notify other participants
           socket
@@ -178,6 +190,10 @@ export class SocketHandlers {
               timestamp: new Date().toISOString(),
             });
 
+          // Clear meeting info from socket
+          socket.currentMeetingId = undefined;
+          socket.participantId = undefined;
+          
           // Confirm successful leave
           socket.emit(WS_EVENTS.LEAVE_MEETING_SUCCESS, {
             meetingId: actualMeetingId,
@@ -185,10 +201,6 @@ export class SocketHandlers {
 
           console.log(`👋 User ${userEmail} left meeting ${actualMeetingId}`);
         }
-
-        // Clear meeting info
-        socket.currentMeetingId = undefined;
-        socket.participantId = undefined;
       } catch (error) {
         console.error("Leave meeting error:", error);
         socket.emit(WS_EVENTS.LEAVE_MEETING_ERROR, {
@@ -390,18 +402,29 @@ export class SocketHandlers {
     socket.on(WS_EVENTS.WEBRTC_SIGNAL, (data) => {
       try {
         const { to, signal, type, from } = data;
-        const targetSocketId = to;
+        
+        // Get target socket ID from participant mapping
+        const targetSocketId = this.participantSocketMap.get(to);
+        
+        if (!targetSocketId) {
+          console.error(`❌ Target participant ${to} not found in mapping`);
+          socket.emit(WS_EVENTS.WEBRTC_ERROR, {
+            message: "Target participant not found",
+            code: "PARTICIPANT_NOT_FOUND",
+          });
+          return;
+        }
 
         // Forward signal to target participant
         socket.to(targetSocketId).emit(WS_EVENTS.WEBRTC_SIGNAL, {
-          from: from || socket.id,
+          from: from || socket.participantId || socket.id,
           signal,
           type,
           timestamp: new Date().toISOString(),
         });
 
         console.log(
-          `📡 WebRTC ${type} signal from ${socket.id} to ${targetSocketId}`
+          `📡 WebRTC ${type} signal from ${socket.participantId || socket.id} to ${to} (socket: ${targetSocketId})`
         );
       } catch (error) {
         console.error("WebRTC signaling error:", error);
@@ -464,6 +487,11 @@ export class SocketHandlers {
 
       const currentMeetingId = socket.currentMeetingId;
       const participantId = socket.participantId;
+      
+      // Remove participant from socket mapping
+      if (participantId) {
+        this.participantSocketMap.delete(participantId);
+      }
 
       // Notify meeting participants
       if (currentMeetingId) {

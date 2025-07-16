@@ -1,9 +1,10 @@
 import MeetingView from "@/components/dashboard/meeting/MeetingView";
 
-export default function MeetingPage({
+export default async function MeetingPage({
   params,
 }: {
-  params: { roomId: string };
+  params: Promise<{ roomId: string }>;
 }) {
-  return <MeetingView roomId={params.roomId} />;
+  const { roomId } = await params;
+  return <MeetingView roomId={roomId} />;
 }

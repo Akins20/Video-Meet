@@ -3,7 +3,7 @@
 "use client";
 import { FC, useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { useMeeting } from "@/hooks/useMeetingCore";
+import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
@@ -116,13 +116,12 @@ const VideoGrid: FC<VideoGridProps> = ({ className }) => {
     localParticipant,
     participantCount,
     getMeetingLink
-  } = useMeeting();
+  } = useMeetingCore();
   
   const { 
     localStream,
     participants: webrtcParticipants,
-    isLocalAudioEnabled,
-    isLocalVideoEnabled
+    mediaState
   } = useWebRTC();
 
   const { getConnectionQuality } = useSocket();
@@ -141,8 +140,8 @@ const VideoGrid: FC<VideoGridProps> = ({ className }) => {
     name: localParticipant?.displayName || 
           (user?.firstName ? `${user.firstName} ${user.lastName}` : 'You'),
     avatar: user?.avatar,
-    isAudioEnabled: isLocalAudioEnabled,
-    isVideoEnabled: isLocalVideoEnabled,
+    isAudioEnabled: mediaState.audioEnabled,
+    isVideoEnabled: mediaState.videoEnabled,
     isSpeaking: false, // TODO: Implement speaking detection
     connectionQuality: getConnectionQuality ? getConnectionQuality() : 'good',
     isPinned: pinnedParticipant === 'local',

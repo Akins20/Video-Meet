@@ -114,6 +114,13 @@ export class WebRTCManager {
   private localStream?: MediaStream;
   private peerConnections = new Map<string, PeerConnection>();
   private isInitialized = false;
+  private signalEmitter: ((to: string, signal: any, type: string) => void) | null = null;
+  private connectionTimeouts = new Map<string, NodeJS.Timeout>();
+  private connectionRetries = new Map<string, number>();
+  
+  // Connection configuration
+  private readonly CONNECTION_TIMEOUT = 30000; // 30 seconds
+  private readonly MAX_RETRIES = 3;
 
   // Current media state - matching exact MediaState interface
   private currentMediaState: MediaState = {
@@ -148,6 +155,13 @@ export class WebRTCManager {
     quality: ConnectionQualityInfo
   ) => void;
   public onError?: (error: Error) => void;
+
+  /**
+   * Set signal emitter function
+   */
+  public setSignalEmitter(emitter: (to: string, signal: any, type: string) => void): void {
+    this.signalEmitter = emitter;
+  }
 
   /**
    * Initialize WebRTC manager
@@ -211,10 +225,12 @@ export class WebRTCManager {
 
       // Set up event handlers
       peerConnection.onRemoteStream = (stream) => {
+        this.clearConnectionTimeout(participantId);
         this.onRemoteStream?.(participantId, stream);
       };
 
       peerConnection.onConnectionStateChange = (state) => {
+        this.handleConnectionStateChange(participantId, state);
         this.onConnectionStateChange?.(participantId, state);
       };
 
@@ -224,6 +240,16 @@ export class WebRTCManager {
       }
 
       this.peerConnections.set(participantId, peerConnection);
+      
+      // Set up connection timeout
+      this.setupConnectionTimeout(participantId, isInitiator);
+      
+      // If this is the initiator, automatically create and send offer
+      if (isInitiator) {
+        const offer = await peerConnection.createOffer();
+        this.emitSignal(participantId, offer, "offer");
+      }
+      
       return true;
     } catch (error) {
       this.onError?.(error as Error);
@@ -240,6 +266,10 @@ export class WebRTCManager {
       peerConnection.close();
       this.peerConnections.delete(participantId);
     }
+    
+    // Clear timeout and retry count
+    this.clearConnectionTimeout(participantId);
+    this.connectionRetries.delete(participantId);
   }
 
   /**
@@ -293,12 +323,104 @@ export class WebRTCManager {
   }
 
   /**
-   * Emit signal (to be connected to socket)
+   * Initiate connection with a participant (as caller)
+   */
+  public async initiateConnection(participantId: string): Promise<boolean> {
+    return await this.createPeerConnection(participantId, true);
+  }
+
+  /**
+   * Accept connection from a participant (as callee)
+   */
+  public async acceptConnection(participantId: string): Promise<boolean> {
+    return await this.createPeerConnection(participantId, false);
+  }
+
+  /**
+   * Set up connection timeout
+   */
+  private setupConnectionTimeout(participantId: string, isInitiator: boolean): void {
+    const timeout = setTimeout(() => {
+      this.handleConnectionTimeout(participantId, isInitiator);
+    }, this.CONNECTION_TIMEOUT);
+    
+    this.connectionTimeouts.set(participantId, timeout);
+  }
+
+  /**
+   * Clear connection timeout
+   */
+  private clearConnectionTimeout(participantId: string): void {
+    const timeout = this.connectionTimeouts.get(participantId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.connectionTimeouts.delete(participantId);
+    }
+  }
+
+  /**
+   * Handle connection timeout
+   */
+  private async handleConnectionTimeout(participantId: string, isInitiator: boolean): Promise<void> {
+    console.warn(`Connection timeout for participant ${participantId}`);
+    
+    const retryCount = this.connectionRetries.get(participantId) || 0;
+    
+    if (retryCount < this.MAX_RETRIES) {
+      console.log(`Retrying connection to ${participantId} (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);
+      
+      // Increment retry count
+      this.connectionRetries.set(participantId, retryCount + 1);
+      
+      // Remove existing connection
+      this.removePeerConnection(participantId);
+      
+      // Retry connection
+      await this.createPeerConnection(participantId, isInitiator);
+    } else {
+      console.error(`Max retries reached for participant ${participantId}`);
+      this.connectionRetries.delete(participantId);
+      this.removePeerConnection(participantId);
+      this.onError?.(new Error(`Failed to connect to participant ${participantId} after ${this.MAX_RETRIES} attempts`));
+    }
+  }
+
+  /**
+   * Handle connection state changes
+   */
+  private handleConnectionStateChange(participantId: string, state: RTCPeerConnectionState): void {
+    switch (state) {
+      case "connected":
+        console.log(`Successfully connected to participant ${participantId}`);
+        this.clearConnectionTimeout(participantId);
+        this.connectionRetries.delete(participantId);
+        break;
+      case "disconnected":
+        console.warn(`Disconnected from participant ${participantId}`);
+        break;
+      case "failed":
+        console.error(`Connection failed for participant ${participantId}`);
+        this.clearConnectionTimeout(participantId);
+        this.handleConnectionTimeout(participantId, false); // Retry as non-initiator
+        break;
+      case "closed":
+        console.log(`Connection closed for participant ${participantId}`);
+        this.clearConnectionTimeout(participantId);
+        this.connectionRetries.delete(participantId);
+        break;
+    }
+  }
+
+  /**
+   * Emit signal to remote participant
    */
   private emitSignal(to: string, signal: any, type: string): void {
-    // This would be connected to the socket in the hook
-    // The hook would handle the actual emission
-    console.log("Emitting signal:", { to, type, signal });
+    if (this.signalEmitter) {
+      this.signalEmitter(to, signal, type);
+      console.log("Emitted signal:", { to, type, signal });
+    } else {
+      console.warn("Signal emitter not set, cannot emit signal:", { to, type, signal });
+    }
   }
 
   /**
@@ -424,6 +546,13 @@ export class WebRTCManager {
       peerConnection.close();
     }
     this.peerConnections.clear();
+
+    // Clear all timeouts and retry counts
+    for (const [participantId, timeout] of this.connectionTimeouts) {
+      clearTimeout(timeout);
+    }
+    this.connectionTimeouts.clear();
+    this.connectionRetries.clear();
 
     // Stop local stream
     if (this.localStream) {

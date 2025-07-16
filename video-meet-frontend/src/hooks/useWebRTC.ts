@@ -239,10 +239,9 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
     async (participantId: string, isInitiator: boolean): Promise<boolean> => {
       try {
         // Create peer connection using webrtcManager
-        const success = await webrtcManager.createPeerConnection(
-          participantId,
-          isInitiator
-        );
+        const success = isInitiator
+          ? await webrtcManager.initiateConnection(participantId)
+          : await webrtcManager.acceptConnection(participantId);
 
         if (success) {
           // Add to participants map
@@ -299,6 +298,17 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
    * Set up WebRTC manager event handlers
    */
   useEffect(() => {
+    // Set up signal emitter for WebRTC manager
+    if (emit) {
+      webrtcManager.setSignalEmitter((to: string, signal: any, type: string) => {
+        emit(WS_EVENTS.WEBRTC_SIGNAL, {
+          to,
+          signal,
+          type,
+        });
+      });
+    }
+    
     // Handle remote stream received
     webrtcManager.onRemoteStream = (
       participantId: string,
@@ -359,7 +369,7 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
       webrtcManager.onConnectionQuality = undefined;
       webrtcManager.onError = undefined;
     };
-  }, []);
+  }, [emit]);
 
   /**
    * Set up WebSocket event handlers for signaling

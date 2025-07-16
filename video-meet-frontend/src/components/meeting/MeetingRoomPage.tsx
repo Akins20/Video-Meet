@@ -77,7 +77,7 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
         leaveMeeting,
         isLoading,
         error: meetingError
-    } = useMeeting();
+    } = useMeeting(roomId);
 
     // Component state
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
