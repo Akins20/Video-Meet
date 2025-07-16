@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "react-hot-toast";
 import { useSocket } from "./useSocket";
-import { webrtcManager } from "@/lib/webrtc";
+import { webrtcManager, DeviceInfo } from "@/lib/webrtc";
 import { WS_EVENTS } from "@/utils/constants";
 import type { MediaState, ConnectionQualityInfo } from "@/types/meeting";
 
@@ -15,7 +15,7 @@ interface ParticipantConnection {
   quality: ConnectionQualityInfo | null;
 }
 
-// Simplified hook interface - only what we actually need
+// Enhanced hook interface with device management
 interface UseWebRTCReturn {
   // Local media state
   localStream: MediaStream | null;
@@ -29,6 +29,18 @@ interface UseWebRTCReturn {
   toggleVideo: () => Promise<boolean>;
   startScreenShare: () => Promise<boolean>;
   stopScreenShare: () => Promise<boolean>;
+
+  // Device management
+  availableDevices: DeviceInfo[];
+  currentDevices: {
+    camera: string;
+    microphone: string;
+    speaker: string;
+  };
+  switchCamera: (deviceId: string) => Promise<void>;
+  switchMicrophone: (deviceId: string) => Promise<void>;
+  switchSpeaker: (deviceId: string) => Promise<void>;
+  enumerateDevices: () => Promise<DeviceInfo[]>;
 
   // Connection management
   initializeMedia: () => Promise<boolean>;
@@ -58,6 +70,14 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
   const [participants, setParticipants] = useState<
     Map<string, ParticipantConnection>
   >(new Map());
+
+  // Device management state
+  const [availableDevices, setAvailableDevices] = useState<DeviceInfo[]>([]);
+  const [currentDevices, setCurrentDevices] = useState({
+    camera: '',
+    microphone: '',
+    speaker: ''
+  });
 
   // Media state matching the exact MediaState interface
   const [mediaState, setMediaState] = useState<MediaState>({
@@ -137,6 +157,8 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
         });
       }
 
+      console.log(`Audio ${audioTrack.enabled ? 'enabled' : 'disabled'}`);
+
       return audioTrack.enabled;
     }
 
@@ -167,6 +189,7 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
         });
       }
 
+      console.log(`Video ${videoTrack.enabled ? 'enabled' : 'disabled'}`);
       return videoTrack.enabled;
     }
 
@@ -342,20 +365,7 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
       });
     };
 
-    // Handle connection quality updates
-    webrtcManager.onConnectionQuality = (
-      participantId: string,
-      quality: ConnectionQualityInfo
-    ) => {
-      setParticipants((prev) => {
-        const updated = new Map(prev);
-        const participant = updated.get(participantId);
-        if (participant) {
-          updated.set(participantId, { ...participant, quality });
-        }
-        return updated;
-      });
-    };
+    // Connection quality updates are handled through WebSocket events
 
     // Handle errors
     webrtcManager.onError = (error: Error) => {
@@ -363,13 +373,73 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
       toast.error(error.message);
     };
 
+    // Handle device changes
+    webrtcManager.onDevicesChanged = (devices: DeviceInfo[]) => {
+      setAvailableDevices(devices);
+    };
+
     return () => {
       webrtcManager.onRemoteStream = undefined;
       webrtcManager.onConnectionStateChange = undefined;
-      webrtcManager.onConnectionQuality = undefined;
+      // Connection quality cleanup not needed
       webrtcManager.onError = undefined;
+      webrtcManager.onDevicesChanged = undefined;
     };
   }, [emit]);
+
+  /**
+   * Initialize devices on mount
+   */
+  useEffect(() => {
+    const initializeDevices = async () => {
+      try {
+        const devices = await webrtcManager.enumerateDevices();
+        setAvailableDevices(devices);
+        setCurrentDevices(webrtcManager.getCurrentDevices());
+      } catch (error) {
+        console.error('Failed to initialize devices:', error);
+      }
+    };
+
+    initializeDevices();
+  }, []);
+
+  /**
+   * Device management functions
+   */
+  const switchCamera = useCallback(async (deviceId: string) => {
+    try {
+      await webrtcManager.switchCamera(deviceId);
+      setCurrentDevices(webrtcManager.getCurrentDevices());
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  const switchMicrophone = useCallback(async (deviceId: string) => {
+    try {
+      await webrtcManager.switchMicrophone(deviceId);
+      setCurrentDevices(webrtcManager.getCurrentDevices());
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  const switchSpeaker = useCallback(async (deviceId: string) => {
+    try {
+      await webrtcManager.switchSpeaker(deviceId);
+      setCurrentDevices(webrtcManager.getCurrentDevices());
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  const enumerateDevices = useCallback(async () => {
+    const devices = await webrtcManager.enumerateDevices();
+    setAvailableDevices(devices);
+    setCurrentDevices(webrtcManager.getCurrentDevices());
+    return devices;
+  }, []);
 
   /**
    * Set up WebSocket event handlers for signaling
@@ -410,6 +480,12 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
     toggleVideo,
     startScreenShare,
     stopScreenShare,
+    availableDevices,
+    currentDevices,
+    switchCamera,
+    switchMicrophone,
+    switchSpeaker,
+    enumerateDevices,
     initializeMedia,
     connectToPeer,
     disconnectFromPeer,

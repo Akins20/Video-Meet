@@ -109,6 +109,13 @@ export class PeerConnection {
   }
 }
 
+// Device information interface
+export interface DeviceInfo {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+}
+
 // Simplified WebRTC manager class
 export class WebRTCManager {
   private localStream?: MediaStream;
@@ -117,6 +124,14 @@ export class WebRTCManager {
   private signalEmitter: ((to: string, signal: any, type: string) => void) | null = null;
   private connectionTimeouts = new Map<string, NodeJS.Timeout>();
   private connectionRetries = new Map<string, number>();
+  
+  // Device management
+  private availableDevices: DeviceInfo[] = [];
+  private currentDevices = {
+    camera: '',
+    microphone: '',
+    speaker: ''
+  };
   
   // Connection configuration
   private readonly CONNECTION_TIMEOUT = 30000; // 30 seconds
@@ -146,15 +161,202 @@ export class WebRTCManager {
   // Event handlers
   public onLocalStream?: (stream: MediaStream) => void;
   public onRemoteStream?: (participantId: string, stream: MediaStream) => void;
-  public onConnectionStateChange?: (
-    participantId: string,
-    state: RTCPeerConnectionState
-  ) => void;
-  public onConnectionQuality?: (
-    participantId: string,
-    quality: ConnectionQualityInfo
-  ) => void;
+  public onConnectionStateChange?: (participantId: string, state: RTCPeerConnectionState) => void;
+  public onDevicesChanged?: (devices: DeviceInfo[]) => void;
   public onError?: (error: Error) => void;
+
+  constructor() {
+    this.initializeDeviceMonitoring();
+  }
+
+  // Initialize device monitoring
+  private async initializeDeviceMonitoring() {
+    try {
+      // Listen for device changes
+      navigator.mediaDevices.addEventListener('devicechange', this.handleDeviceChange);
+      
+      // Initial device enumeration
+      await this.enumerateDevices();
+    } catch (error) {
+      console.error('Failed to initialize device monitoring:', error);
+    }
+  }
+
+  // Enumerate available devices
+  public async enumerateDevices(): Promise<DeviceInfo[]> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      this.availableDevices = devices.map(device => ({
+        deviceId: device.deviceId,
+        label: device.label || `${device.kind} (${device.deviceId.slice(0, 8)}...)`,
+        kind: device.kind
+      }));
+      
+      // Set default devices if none selected
+      if (!this.currentDevices.camera) {
+        const camera = this.availableDevices.find(d => d.kind === 'videoinput');
+        if (camera) this.currentDevices.camera = camera.deviceId;
+      }
+      
+      if (!this.currentDevices.microphone) {
+        const microphone = this.availableDevices.find(d => d.kind === 'audioinput');
+        if (microphone) this.currentDevices.microphone = microphone.deviceId;
+      }
+      
+      if (!this.currentDevices.speaker) {
+        const speaker = this.availableDevices.find(d => d.kind === 'audiooutput');
+        if (speaker) this.currentDevices.speaker = speaker.deviceId;
+      }
+      
+      this.onDevicesChanged?.(this.availableDevices);
+      return this.availableDevices;
+    } catch (error) {
+      console.error('Failed to enumerate devices:', error);
+      this.onError?.(error as Error);
+      return [];
+    }
+  }
+
+  // Handle device changes
+  private handleDeviceChange = async () => {
+    await this.enumerateDevices();
+  };
+
+  // Get available devices by type
+  public getDevicesByType(type: MediaDeviceKind): DeviceInfo[] {
+    return this.availableDevices.filter(device => device.kind === type);
+  }
+
+  // Get current devices
+  public getCurrentDevices() {
+    return { ...this.currentDevices };
+  }
+
+  // Switch camera
+  public async switchCamera(deviceId: string): Promise<void> {
+    try {
+      this.currentDevices.camera = deviceId;
+      
+      // If we have a local stream, restart it with the new camera
+      if (this.localStream) {
+        await this.restartLocalStream();
+      }
+      
+      toast.success('Camera switched successfully');
+    } catch (error) {
+      console.error('Failed to switch camera:', error);
+      toast.error('Failed to switch camera');
+      throw error;
+    }
+  }
+
+  // Switch microphone
+  public async switchMicrophone(deviceId: string): Promise<void> {
+    try {
+      this.currentDevices.microphone = deviceId;
+      
+      // If we have a local stream, restart it with the new microphone
+      if (this.localStream) {
+        await this.restartLocalStream();
+      }
+      
+      toast.success('Microphone switched successfully');
+    } catch (error) {
+      console.error('Failed to switch microphone:', error);
+      toast.error('Failed to switch microphone');
+      throw error;
+    }
+  }
+
+  // Switch speaker (if supported)
+  public async switchSpeaker(deviceId: string): Promise<void> {
+    try {
+      this.currentDevices.speaker = deviceId;
+      
+      // Apply to all audio elements if possible
+      const audioElements = document.querySelectorAll('audio, video');
+      const promises = Array.from(audioElements).map(async (element) => {
+        const audioElement = element as HTMLAudioElement;
+        if (audioElement.setSinkId) {
+          try {
+            await audioElement.setSinkId(deviceId);
+          } catch (error) {
+            console.warn('Failed to set sink ID for element:', error);
+          }
+        }
+      });
+      
+      await Promise.allSettled(promises);
+      toast.success('Speaker switched successfully');
+    } catch (error) {
+      console.error('Failed to switch speaker:', error);
+      toast.error('Failed to switch speaker');
+      throw error;
+    }
+  }
+
+  // Restart local stream with current device settings
+  private async restartLocalStream(): Promise<void> {
+    if (this.localStream) {
+      // Stop existing stream
+      this.localStream.getTracks().forEach(track => track.stop());
+    }
+    
+    // Create new stream with current device settings
+    const constraints: MediaStreamConstraints = {
+      video: this.currentMediaState.videoEnabled ? {
+        deviceId: this.currentDevices.camera ? { exact: this.currentDevices.camera } : undefined,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      } : false,
+      audio: this.currentMediaState.audioEnabled ? {
+        deviceId: this.currentDevices.microphone ? { exact: this.currentDevices.microphone } : undefined,
+        echoCancellation: this.currentMediaState.echoCancellation,
+        noiseSuppression: this.currentMediaState.noiseCancellation,
+        autoGainControl: this.currentMediaState.autoGainControl
+      } : false
+    };
+    
+    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    
+    // Update all peer connections with new stream
+    this.peerConnections.forEach((peerConnection, participantId) => {
+      this.replaceStreamInPeerConnection(peerConnection, this.localStream!);
+    });
+    
+    // Notify about new local stream
+    this.onLocalStream?.(this.localStream);
+  }
+
+  // Replace stream in peer connection
+  private replaceStreamInPeerConnection(peerConnection: PeerConnection, newStream: MediaStream) {
+    try {
+      const pc = (peerConnection as any).pc as RTCPeerConnection;
+      const senders = pc.getSenders();
+      
+      newStream.getTracks().forEach(track => {
+        const sender = senders.find(s => s.track?.kind === track.kind);
+        if (sender) {
+          sender.replaceTrack(track);
+        } else {
+          pc.addTrack(track, newStream);
+        }
+      });
+    } catch (error) {
+      console.error('Failed to replace stream in peer connection:', error);
+    }
+  }
+
+  // Get all available devices
+  public getAvailableDevices(): DeviceInfo[] {
+    return [...this.availableDevices];
+  }
+
+  // Clean up device monitoring
+  public cleanup() {
+    navigator.mediaDevices.removeEventListener('devicechange', this.handleDeviceChange);
+  }
 
   /**
    * Set signal emitter function

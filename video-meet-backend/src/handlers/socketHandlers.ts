@@ -393,6 +393,53 @@ export class SocketHandlers {
         console.error("Screen share stop error:", error);
       }
     });
+
+    // Recording Events
+    socket.on(WS_EVENTS.RECORDING_START, (data) => {
+      try {
+        const { meetingId, participantId } = data;
+        const actualMeetingId = meetingId || socket.currentMeetingId;
+        const actualParticipantId = participantId || socket.participantId;
+
+        if (actualMeetingId) {
+          socket
+            .to(`meeting:${actualMeetingId}`)
+            .emit(WS_EVENTS.RECORDING_STARTED, {
+              participantId: actualParticipantId,
+              timestamp: new Date().toISOString(),
+            });
+
+          console.log(
+            `🎬 Recording started in meeting ${actualMeetingId} by ${userEmail}`
+          );
+        }
+      } catch (error) {
+        console.error("Recording start error:", error);
+      }
+    });
+
+    socket.on(WS_EVENTS.RECORDING_STOP, (data) => {
+      try {
+        const { meetingId, participantId } = data;
+        const actualMeetingId = meetingId || socket.currentMeetingId;
+        const actualParticipantId = participantId || socket.participantId;
+
+        if (actualMeetingId) {
+          socket
+            .to(`meeting:${actualMeetingId}`)
+            .emit(WS_EVENTS.RECORDING_STOPPED, {
+              participantId: actualParticipantId,
+              timestamp: new Date().toISOString(),
+            });
+
+          console.log(
+            `🎬 Recording stopped in meeting ${actualMeetingId} by ${userEmail}`
+          );
+        }
+      } catch (error) {
+        console.error("Recording stop error:", error);
+      }
+    });
   }
 
   /**

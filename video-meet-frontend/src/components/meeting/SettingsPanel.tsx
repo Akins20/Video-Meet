@@ -90,6 +90,12 @@ const SettingsPanel: FC = () => {
   const {
     mediaState,
     initializeMedia,
+    availableDevices,
+    currentDevices,
+    switchCamera,
+    switchMicrophone,
+    switchSpeaker,
+    enumerateDevices,
     error: webrtcError
   } = useWebRTC();
   
@@ -154,10 +160,22 @@ const SettingsPanel: FC = () => {
     }
   }, [user]);
 
-  // Mock device arrays for now - these would come from navigator.mediaDevices.enumerateDevices()
-  const audioDevices: DeviceInfo[] = [];
-  const videoDevices: DeviceInfo[] = [];
-  const speakerDevices: DeviceInfo[] = [];
+  // Update selected devices when current devices change
+  useEffect(() => {
+    if (currentDevices.camera) setSelectedVideo(currentDevices.camera);
+    if (currentDevices.microphone) setSelectedAudio(currentDevices.microphone);
+    if (currentDevices.speaker) setSelectedSpeaker(currentDevices.speaker);
+  }, [currentDevices]);
+
+  // Initialize devices on mount
+  useEffect(() => {
+    enumerateDevices();
+  }, [enumerateDevices]);
+
+  // Get device arrays from availableDevices
+  const audioDevices = availableDevices.filter(device => device.kind === 'audioinput');
+  const videoDevices = availableDevices.filter(device => device.kind === 'videoinput');
+  const speakerDevices = availableDevices.filter(device => device.kind === 'audiooutput');
 
   // Cleanup function for test streams
   const cleanupTestStream = useCallback(() => {
@@ -258,21 +276,39 @@ const SettingsPanel: FC = () => {
     }
   }, [isTestingMic, selectedAudio, cleanupTestStream]);
 
-  // Handle device changes - simplified for now
+  // Handle device changes with real WebRTC functionality
   const handleCameraChange = useCallback(async (deviceId: string) => {
     setSelectedVideo(deviceId);
-    toast.success('Camera selection saved');
-  }, []);
+    try {
+      await switchCamera(deviceId);
+      toast.success('Camera switched successfully');
+    } catch (error) {
+      console.error('Failed to switch camera:', error);
+      toast.error('Failed to switch camera');
+    }
+  }, [switchCamera]);
 
   const handleMicrophoneChange = useCallback(async (deviceId: string) => {
     setSelectedAudio(deviceId);
-    toast.success('Microphone selection saved');
-  }, []);
+    try {
+      await switchMicrophone(deviceId);
+      toast.success('Microphone switched successfully');
+    } catch (error) {
+      console.error('Failed to switch microphone:', error);
+      toast.error('Failed to switch microphone');
+    }
+  }, [switchMicrophone]);
 
   const handleSpeakerChange = useCallback(async (deviceId: string) => {
     setSelectedSpeaker(deviceId);
-    toast.success('Speaker selection saved');
-  }, []);
+    try {
+      await switchSpeaker(deviceId);
+      toast.success('Speaker switched successfully');
+    } catch (error) {
+      console.error('Failed to switch speaker:', error);
+      toast.error('Failed to switch speaker');
+    }
+  }, [switchSpeaker]);
 
   // Save settings
   const saveSettings = useCallback(async () => {

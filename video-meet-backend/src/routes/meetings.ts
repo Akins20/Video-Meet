@@ -1,6 +1,8 @@
 import { Router } from "express";
 import MeetingController from "../controllers/MeetingController";
 import ParticipantController from "../controllers/ParticipantController";
+import ChatController from "../controllers/ChatController";
+import RecordingController from "../controllers/RecordingController";
 import {
   requireAuth,
   optionalAuth,
@@ -256,6 +258,105 @@ router.put(
 );
 
 /**
+ * Chat Routes
+ * These routes handle meeting chat functionality
+ */
+
+/**
+ * @route   POST /api/v1/meetings/:meetingId/chat
+ * @desc    Send a chat message
+ * @access  Private (Meeting participants only)
+ * @middleware requireMeetingParticipant, generalRateLimit, sanitizeInput
+ */
+router.post(
+  "/:meetingId/chat",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit chat messages
+  sanitizeInput, // Sanitize input data
+  ChatController.sendMessage // Send message
+);
+
+/**
+ * @route   GET /api/v1/meetings/:meetingId/chat
+ * @desc    Get chat messages for a meeting
+ * @access  Private (Meeting participants only)
+ * @middleware requireMeetingParticipant, generalRateLimit
+ */
+router.get(
+  "/:meetingId/chat",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit
+  ChatController.getMessages // Get messages
+);
+
+/**
+ * @route   PUT /api/v1/meetings/:meetingId/chat/:messageId
+ * @desc    Edit a chat message
+ * @access  Private (Message owner only)
+ * @middleware requireMeetingParticipant, generalRateLimit, sanitizeInput
+ */
+router.put(
+  "/:meetingId/chat/:messageId",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit
+  sanitizeInput, // Sanitize input data
+  ChatController.editMessage // Edit message
+);
+
+/**
+ * @route   DELETE /api/v1/meetings/:meetingId/chat/:messageId
+ * @desc    Delete a chat message
+ * @access  Private (Message owner or moderator)
+ * @middleware requireMeetingParticipant, generalRateLimit
+ */
+router.delete(
+  "/:meetingId/chat/:messageId",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit
+  ChatController.deleteMessage // Delete message
+);
+
+/**
+ * @route   POST /api/v1/meetings/:meetingId/chat/:messageId/reactions
+ * @desc    Add reaction to a message
+ * @access  Private (Meeting participants only)
+ * @middleware requireMeetingParticipant, generalRateLimit, sanitizeInput
+ */
+router.post(
+  "/:meetingId/chat/:messageId/reactions",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit
+  sanitizeInput, // Sanitize input data
+  ChatController.addReaction // Add reaction
+);
+
+/**
+ * @route   GET /api/v1/meetings/:meetingId/chat/stats
+ * @desc    Get chat statistics
+ * @access  Private (Meeting participants only)
+ * @middleware requireMeetingParticipant, generalRateLimit
+ */
+router.get(
+  "/:meetingId/chat/stats",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit
+  ChatController.getChatStats // Get stats
+);
+
+/**
+ * @route   DELETE /api/v1/meetings/:meetingId/chat
+ * @desc    Clear all chat messages (host only)
+ * @access  Private (Host only)
+ * @middleware requireMeetingHost, generalRateLimit
+ */
+router.delete(
+  "/:meetingId/chat",
+  requireMeetingHost, // Require meeting host
+  generalRateLimit, // Rate limit
+  ChatController.clearChat // Clear chat
+);
+
+/**
  * WebRTC Signaling Routes
  * These routes handle real-time communication signaling
  */
@@ -272,6 +373,92 @@ router.post(
   signalingRateLimit, // Rate limit signaling
   sanitizeInput, // Sanitize input data
   ParticipantController.handleWebRTCSignaling // Handle signaling
+);
+
+/**
+ * Recording Routes
+ * These routes handle meeting recording functionality
+ */
+
+/**
+ * @route   POST /api/v1/meetings/:meetingId/recording/start
+ * @desc    Start recording a meeting
+ * @access  Private (Host/Moderator only)
+ * @middleware requireMeetingParticipant, requirePermission('canManageRecording'), generalRateLimit, sanitizeInput
+ */
+router.post(
+  "/:meetingId/recording/start",
+  requireMeetingParticipant, // Require meeting participant
+  requirePermission("canManageRecording"), // Check recording permissions
+  generalRateLimit, // Rate limit
+  sanitizeInput, // Sanitize input data
+  RecordingController.startRecording // Start recording
+);
+
+/**
+ * @route   POST /api/v1/meetings/:meetingId/recording/stop
+ * @desc    Stop recording a meeting
+ * @access  Private (Host/Moderator only)
+ * @middleware requireMeetingParticipant, requirePermission('canManageRecording'), generalRateLimit
+ */
+router.post(
+  "/:meetingId/recording/stop",
+  requireMeetingParticipant, // Require meeting participant
+  requirePermission("canManageRecording"), // Check recording permissions
+  generalRateLimit, // Rate limit
+  RecordingController.stopRecording // Stop recording
+);
+
+/**
+ * @route   GET /api/v1/meetings/:meetingId/recording/status
+ * @desc    Get recording status for a meeting
+ * @access  Private (Meeting participants only)
+ * @middleware requireMeetingParticipant, generalRateLimit
+ */
+router.get(
+  "/:meetingId/recording/status",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit
+  RecordingController.getRecordingStatus // Get recording status
+);
+
+/**
+ * @route   GET /api/v1/meetings/:meetingId/recordings
+ * @desc    Get all recordings for a meeting
+ * @access  Private (Meeting participants only)
+ * @middleware requireMeetingParticipant, generalRateLimit
+ */
+router.get(
+  "/:meetingId/recordings",
+  requireMeetingParticipant, // Require meeting participant
+  generalRateLimit, // Rate limit
+  RecordingController.getMeetingRecordings // Get meeting recordings
+);
+
+/**
+ * @route   DELETE /api/v1/recordings/:recordingId
+ * @desc    Delete a recording
+ * @access  Private (Host/Moderator only)
+ * @middleware requireAuth, generalRateLimit
+ */
+router.delete(
+  "/recordings/:recordingId",
+  requireAuth, // Require authentication
+  generalRateLimit, // Rate limit
+  RecordingController.deleteRecording // Delete recording
+);
+
+/**
+ * @route   GET /api/v1/recordings/:recordingId/download
+ * @desc    Download a recording
+ * @access  Private (Meeting participants only)
+ * @middleware requireAuth, generalRateLimit
+ */
+router.get(
+  "/recordings/:recordingId/download",
+  requireAuth, // Require authentication
+  generalRateLimit, // Rate limit
+  RecordingController.downloadRecording // Download recording
 );
 
 export default router;

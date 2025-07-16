@@ -12,6 +12,7 @@ export interface AuthenticatedRequest extends Request {
   userId?: string;
   tokenPayload?: ITokenPayload;
   meetingId?: string;
+  participantId?: string;
 }
 
 /**
