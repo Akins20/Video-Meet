@@ -6,6 +6,7 @@ import { WS_EVENTS } from "@/utils/constants";
 import type {
   MediaState,
   ConnectionQualityInfo,
+  ConnectionQuality,
   MediaQuality,
 } from "@/types/meeting";
 
@@ -133,6 +134,10 @@ export class WebRTCManager {
     speaker: ''
   };
   
+  // Connection quality monitoring
+  private statsMonitoringInterval?: NodeJS.Timeout;
+  private participantStats = new Map<string, any>();
+  
   // Connection configuration
   private readonly CONNECTION_TIMEOUT = 30000; // 30 seconds
   private readonly MAX_RETRIES = 3;
@@ -162,6 +167,7 @@ export class WebRTCManager {
   public onLocalStream?: (stream: MediaStream) => void;
   public onRemoteStream?: (participantId: string, stream: MediaStream) => void;
   public onConnectionStateChange?: (participantId: string, state: RTCPeerConnectionState) => void;
+  public onConnectionQuality?: (participantId: string, quality: ConnectionQualityInfo) => void;
   public onDevicesChanged?: (devices: DeviceInfo[]) => void;
   public onError?: (error: Error) => void;
 
@@ -446,6 +452,11 @@ export class WebRTCManager {
       // Set up connection timeout
       this.setupConnectionTimeout(participantId, isInitiator);
       
+      // Start quality monitoring if this is the first connection
+      if (this.peerConnections.size === 1) {
+        this.startQualityMonitoring();
+      }
+      
       // If this is the initiator, automatically create and send offer
       if (isInitiator) {
         const offer = await peerConnection.createOffer();
@@ -472,6 +483,14 @@ export class WebRTCManager {
     // Clear timeout and retry count
     this.clearConnectionTimeout(participantId);
     this.connectionRetries.delete(participantId);
+    
+    // Remove participant stats
+    this.participantStats.delete(participantId);
+    
+    // Stop quality monitoring if no more connections
+    if (this.peerConnections.size === 0) {
+      this.stopQualityMonitoring();
+    }
   }
 
   /**
@@ -740,9 +759,218 @@ export class WebRTCManager {
   }
 
   /**
+   * Start connection quality monitoring
+   */
+  public startQualityMonitoring(): void {
+    if (this.statsMonitoringInterval) {
+      clearInterval(this.statsMonitoringInterval);
+    }
+
+    this.statsMonitoringInterval = setInterval(async () => {
+      for (const [participantId] of this.peerConnections) {
+        try {
+          const quality = await this.getConnectionQuality(participantId);
+          if (quality) {
+            this.onConnectionQuality?.(participantId, quality);
+          }
+        } catch (error) {
+          console.warn(`Failed to get connection quality for ${participantId}:`, error);
+        }
+      }
+    }, 5000); // Monitor every 5 seconds
+  }
+
+  /**
+   * Stop connection quality monitoring
+   */
+  public stopQualityMonitoring(): void {
+    if (this.statsMonitoringInterval) {
+      clearInterval(this.statsMonitoringInterval);
+      this.statsMonitoringInterval = undefined;
+    }
+  }
+
+  /**
+   * Get connection quality for a specific participant
+   */
+  public async getConnectionQuality(participantId: string): Promise<ConnectionQualityInfo | null> {
+    const peerConnection = this.peerConnections.get(participantId);
+    if (!peerConnection) return null;
+
+    try {
+      const pc = (peerConnection as any).pc as RTCPeerConnection;
+      const stats = await pc.getStats();
+      return this.calculateConnectionQuality(participantId, stats);
+    } catch (error) {
+      console.error(`Failed to get stats for participant ${participantId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Calculate connection quality from RTCStatsReport
+   */
+  private calculateConnectionQuality(participantId: string, stats: RTCStatsReport): ConnectionQualityInfo {
+    const bandwidth = { incoming: 0, outgoing: 0, available: 1000 };
+    let latency = 0;
+    let packetLoss = 0;
+    const jitter = 0;
+    let audioQuality: ConnectionQuality = 'good';
+    let videoQuality: ConnectionQuality = 'good';
+    const audioStats = { codec: 'opus', bitrate: 0, packetLoss: 0 };
+    const videoStats = { codec: 'vp8', resolution: '1280x720', frameRate: 30, bitrate: 0, packetLoss: 0 };
+
+    // Parse RTCStatsReport
+    stats.forEach((report: any) => {
+      switch (report.type) {
+        case 'inbound-rtp':
+          if (report.mediaType === 'audio') {
+            audioStats.bitrate = report.bytesReceived || 0;
+            audioStats.packetLoss = this.calculatePacketLoss(report);
+          } else if (report.mediaType === 'video') {
+            videoStats.bitrate = report.bytesReceived || 0;
+            videoStats.packetLoss = this.calculatePacketLoss(report);
+            if (report.frameWidth && report.frameHeight) {
+              videoStats.resolution = `${report.frameWidth}x${report.frameHeight}`;
+            }
+            if (report.framesPerSecond) {
+              videoStats.frameRate = report.framesPerSecond;
+            }
+          }
+          bandwidth.incoming += (report.bytesReceived || 0) * 8 / 1000; // Convert to kbps
+          break;
+
+        case 'outbound-rtp':
+          if (report.mediaType === 'audio') {
+            audioStats.bitrate = Math.max(audioStats.bitrate, report.bytesSent || 0);
+          } else if (report.mediaType === 'video') {
+            videoStats.bitrate = Math.max(videoStats.bitrate, report.bytesSent || 0);
+          }
+          bandwidth.outgoing += (report.bytesSent || 0) * 8 / 1000; // Convert to kbps
+          break;
+
+        case 'candidate-pair':
+          if (report.state === 'succeeded' && report.nominated) {
+            latency = report.currentRoundTripTime ? report.currentRoundTripTime * 1000 : 0;
+            bandwidth.available = report.availableOutgoingBitrate || 1000;
+          }
+          break;
+
+        case 'media-source':
+          if (report.kind === 'audio' && report.audioLevel !== undefined) {
+            // Audio quality assessment based on audio level
+            audioQuality = report.audioLevel > 0.1 ? 'good' : 'fair';
+          }
+          break;
+      }
+    });
+
+    // Calculate overall packet loss
+    packetLoss = Math.max(audioStats.packetLoss, videoStats.packetLoss);
+
+    // Determine video quality based on metrics
+    if (videoStats.frameRate < 15 || videoStats.bitrate < 100) {
+      videoQuality = 'poor';
+    } else if (videoStats.frameRate < 24 || videoStats.bitrate < 500) {
+      videoQuality = 'fair';
+    } else if (videoStats.frameRate < 30 || videoStats.bitrate < 1000) {
+      videoQuality = 'good';
+    } else {
+      videoQuality = 'excellent';
+    }
+
+    // Determine audio quality
+    if (audioStats.bitrate < 32) {
+      audioQuality = 'poor';
+    } else if (audioStats.bitrate < 64) {
+      audioQuality = 'fair';
+    } else if (audioStats.bitrate < 128) {
+      audioQuality = 'good';
+    } else {
+      audioQuality = 'excellent';
+    }
+
+    // Calculate overall quality
+    const overall = this.determineOverallQuality(latency, packetLoss, bandwidth.incoming);
+
+    // Store stats for comparison
+    this.participantStats.set(participantId, {
+      timestamp: Date.now(),
+      bandwidth,
+      latency,
+      packetLoss,
+      jitter
+    });
+
+    return {
+      overall,
+      latency,
+      jitter,
+      packetLoss,
+      bandwidth,
+      audio: {
+        quality: audioQuality,
+        codec: audioStats.codec,
+        bitrate: audioStats.bitrate,
+        packetLoss: audioStats.packetLoss,
+      },
+      video: {
+        quality: videoQuality,
+        codec: videoStats.codec,
+        resolution: videoStats.resolution,
+        frameRate: videoStats.frameRate,
+        bitrate: videoStats.bitrate,
+        packetLoss: videoStats.packetLoss,
+      },
+      connectionType: 'direct', // Could be enhanced to detect actual connection type
+      protocol: 'udp', // Default, could be enhanced
+      lastMeasured: new Date().toISOString(),
+      measurementInterval: 5000,
+    };
+  }
+
+  /**
+   * Calculate packet loss percentage
+   */
+  private calculatePacketLoss(report: any): number {
+    const packetsLost = report.packetsLost || 0;
+    const packetsReceived = report.packetsReceived || 0;
+    const totalPackets = packetsLost + packetsReceived;
+    
+    if (totalPackets === 0) return 0;
+    return (packetsLost / totalPackets) * 100;
+  }
+
+  /**
+   * Determine overall connection quality based on key metrics
+   */
+  private determineOverallQuality(latency: number, packetLoss: number, bandwidth: number): ConnectionQuality {
+    // Poor quality thresholds
+    if (latency > 300 || packetLoss > 5 || bandwidth < 100) {
+      return 'poor';
+    }
+    
+    // Fair quality thresholds
+    if (latency > 150 || packetLoss > 2 || bandwidth < 500) {
+      return 'fair';
+    }
+    
+    // Good quality thresholds
+    if (latency > 50 || packetLoss > 0.5 || bandwidth < 1000) {
+      return 'good';
+    }
+    
+    // Excellent quality
+    return 'excellent';
+  }
+
+  /**
    * Destroy manager
    */
   public destroy(): void {
+    // Stop quality monitoring
+    this.stopQualityMonitoring();
+
     // Close all peer connections
     for (const [participantId, peerConnection] of this.peerConnections) {
       peerConnection.close();
@@ -755,6 +983,9 @@ export class WebRTCManager {
     }
     this.connectionTimeouts.clear();
     this.connectionRetries.clear();
+
+    // Clear participant stats
+    this.participantStats.clear();
 
     // Stop local stream
     if (this.localStream) {

@@ -115,19 +115,31 @@ const VideoGrid: FC<VideoGridProps> = ({ className }) => {
     participants: meetingParticipants,
     localParticipant,
     participantCount,
-    getMeetingLink
+    getMeetingLink,
+    meeting
   } = useMeetingCore();
   
   const { 
     localStream,
     participants: webrtcParticipants,
     mediaState
-  } = useWebRTC();
+  } = useWebRTC(meeting?.roomId || 'default');
 
   const { getConnectionQuality } = useSocket();
 
   // State
   const [pinnedParticipant, setPinnedParticipant] = useState<string | null>(null);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('🎥 VideoGrid debug:', {
+      hasLocalStream: !!localStream,
+      localStreamTracks: localStream?.getTracks().length || 0,
+      webrtcParticipantsCount: webrtcParticipants.size,
+      mediaState,
+      meetingRoomId: meeting?.roomId
+    });
+  }, [localStream, webrtcParticipants, mediaState, meeting?.roomId]);
 
   // Convert meeting participants to array format with proper typing
   const participantsArray: MeetingParticipant[] = Array.isArray(meetingParticipants) 
@@ -211,13 +223,30 @@ const VideoGrid: FC<VideoGridProps> = ({ className }) => {
     useEffect(() => {
       if (!videoRef.current) return;
 
+      console.log(`🎥 Setting up video for participant ${participant.id}:`, {
+        isLocal: participant.isLocal,
+        hasLocalStream: !!localStream,
+        isVideoEnabled: participant.isVideoEnabled,
+        localStreamTracks: localStream?.getTracks().length || 0
+      });
+
       if (participant.isLocal && localStream && participant.isVideoEnabled) {
+        console.log(`🎥 Setting local stream for ${participant.id}`);
         videoRef.current.srcObject = localStream;
+        videoRef.current.play().catch(e => console.error('Failed to play video:', e));
       } else if (!participant.isLocal) {
         // Get remote stream from WebRTC participants
         const webrtcParticipant = webrtcParticipants.get(participant.id);
+        console.log(`🎥 Remote participant ${participant.id}:`, {
+          hasWebrtcParticipant: !!webrtcParticipant,
+          hasStream: !!webrtcParticipant?.stream,
+          isVideoEnabled: participant.isVideoEnabled
+        });
+        
         if (webrtcParticipant?.stream && participant.isVideoEnabled) {
+          console.log(`🎥 Setting remote stream for ${participant.id}`);
           videoRef.current.srcObject = webrtcParticipant.stream;
+          videoRef.current.play().catch(e => console.error('Failed to play video:', e));
         }
       }
     }, [participant, localStream, webrtcParticipants]);
@@ -261,6 +290,8 @@ const VideoGrid: FC<VideoGridProps> = ({ className }) => {
               className={`w-full h-full object-cover ${
                 participant.isLocal ? 'scale-x-[-1]' : ''
               }`}
+              onLoadedData={() => console.log(`🎥 Video loaded for ${participant.id}`)}
+              onError={(e) => console.error(`🎥 Video error for ${participant.id}:`, e)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-800">

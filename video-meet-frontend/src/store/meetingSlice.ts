@@ -162,6 +162,9 @@ export interface MeetingState {
     // Recording state
     isRecording: boolean
     recordingStartedAt?: string
+
+    // Timer state for forcing re-renders
+    timerTimestamp: number
 }
 
 // Initial state
@@ -212,6 +215,10 @@ const initialState: MeetingState = {
 
     // Recording
     isRecording: false,
+    recordingStartedAt: undefined,
+
+    // Timer state for forcing re-renders
+    timerTimestamp: Date.now(),
 }
 
 const meetingSlice = createSlice({
@@ -483,6 +490,11 @@ const meetingSlice = createSlice({
             state.recordingStartedAt = undefined
         },
 
+        // Timer management for forcing re-renders
+        updateTimerTimestamp: (state) => {
+            state.timerTimestamp = Date.now()
+        },
+
         // Meeting list management
         loadMeetingsStart: (state) => {
             state.meetingsLoading = true
@@ -547,6 +559,7 @@ export const {
     updateICEConnectionState,
     startRecording,
     stopRecording,
+    updateTimerTimestamp,
     loadMeetingsStart,
     loadMeetingsSuccess,
     loadMeetingsFailure,

@@ -198,8 +198,6 @@ export const useMeeting = (roomId: string, mode: "live" | "data" = "live") => {
           meetingStatus: dataHook.meetingData?.status || "ended",
           meetingError: dataHook.error,
           participantCount: dataHook.participants.length,
-          onlineParticipants: dataHook.participants.filter((p) => p.isActive),
-          offlineParticipants: dataHook.participants.filter((p) => !p.isActive),
           meetingDuration: dataHook.calculatedDuration,
           isLoading: dataHook.isLoading,
           error: dataHook.error,
@@ -295,7 +293,7 @@ export const useMeeting = (roomId: string, mode: "live" | "data" = "live") => {
       hasUnreadMessages: isDataMode ? false : chatHook.unreadCount > 0,
       totalActiveParticipants: isDataMode
         ? dataHook.participants.filter((p) => p.isActive).length
-        : coreHook.onlineParticipants.length,
+        : coreHook.participants.length,
       meetingHasStarted: isDataMode
         ? dataHook.meetingData?.status === "active" ||
           dataHook.meetingData?.status === "ended"

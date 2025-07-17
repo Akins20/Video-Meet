@@ -17,33 +17,7 @@ import {
   UserMinus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-// Use the interface from meetingSlice.ts
-interface MeetingParticipant {
-  id: string;
-  userId?: string;
-  displayName: string;
-  avatar?: string;
-  role: 'host' | 'moderator' | 'participant' | 'guest';
-  socketId?: string;
-  peerId?: string;
-  isLocal: boolean;
-  mediaState: {
-    audioEnabled: boolean;
-    videoEnabled: boolean;
-    screenSharing: boolean;
-    handRaised: boolean;
-  };
-  connectionQuality: {
-    latency?: number;
-    bandwidth?: number;
-    packetLoss?: number;
-    quality: 'poor' | 'fair' | 'good' | 'excellent';
-    lastUpdated: string;
-  };
-  joinedAt: string;
-  lastSeen: string;
-}
+import { MeetingParticipant } from "@/types/meeting";
 
 interface ParticipantCardProps {
   participant: MeetingParticipant;
@@ -132,7 +106,7 @@ const ParticipantCard: FC<ParticipantCardProps> = ({
     >
       <motion.div
         className={`relative p-3 rounded-xl bg-slate-700/50 backdrop-blur-sm border border-slate-600/50 hover:border-slate-500/70 transition-all duration-200 ${
-          participant.mediaState.handRaised ? 'ring-2 ring-yellow-400/50' : ''
+          participant.handRaised ? 'ring-2 ring-yellow-400/50' : ''
         }`}
       >
         <div className="flex items-center justify-between">
@@ -158,7 +132,7 @@ const ParticipantCard: FC<ParticipantCardProps> = ({
               </div>
 
               {/* Hand raised indicator */}
-              {participant.mediaState.handRaised && (
+              {participant.handRaised && (
                 <motion.div
                   className="absolute -top-1 -left-1 w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center text-xs"
                   animate={{ scale: [1, 1.2, 1] }}
@@ -185,11 +159,11 @@ const ParticipantCard: FC<ParticipantCardProps> = ({
               
               <div className="flex items-center gap-2 mt-1">
                 {/* Connection quality */}
-                {getConnectionIcon(participant.connectionQuality.quality)}
+                {getConnectionIcon(participant.connectionQuality.overall)}
                 
                 {/* Status text */}
                 <span className="text-xs text-slate-400 capitalize">
-                  {participant.connectionQuality.quality}
+                  {participant.connectionQuality.overall}
                 </span>
               </div>
             </div>

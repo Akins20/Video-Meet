@@ -103,6 +103,7 @@ const SettingsPanel: FC = () => {
   const [activeCategory, setActiveCategory] = useState("audio-video");
   const [isTestingCamera, setIsTestingCamera] = useState(false);
   const [isTestingMic, setIsTestingMic] = useState(false);
+  const [isTestingSpeaker, setIsTestingSpeaker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [videoQuality, setVideoQuality] = useState([720]);
@@ -111,6 +112,23 @@ const SettingsPanel: FC = () => {
   const [selectedAudio, setSelectedAudio] = useState("");
   const [selectedVideo, setSelectedVideo] = useState("");
   const [selectedSpeaker, setSelectedSpeaker] = useState("");
+  
+  // Refresh devices function
+  const [isRefreshingDevices, setIsRefreshingDevices] = useState(false);
+  const refreshDevices = useCallback(async () => {
+    if (isRefreshingDevices) return;
+    
+    setIsRefreshingDevices(true);
+    try {
+      await enumerateDevices();
+      toast.success('Device list refreshed');
+    } catch (error) {
+      console.error('Failed to refresh devices:', error);
+      toast.error('Failed to refresh device list');
+    } finally {
+      setIsRefreshingDevices(false);
+    }
+  }, [enumerateDevices, isRefreshingDevices]);
   
   // Refs
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
@@ -162,15 +180,15 @@ const SettingsPanel: FC = () => {
 
   // Update selected devices when current devices change
   useEffect(() => {
-    if (currentDevices.camera) setSelectedVideo(currentDevices.camera);
-    if (currentDevices.microphone) setSelectedAudio(currentDevices.microphone);
-    if (currentDevices.speaker) setSelectedSpeaker(currentDevices.speaker);
+    setSelectedVideo(currentDevices.camera || '');
+    setSelectedAudio(currentDevices.microphone || '');
+    setSelectedSpeaker(currentDevices.speaker || '');
   }, [currentDevices]);
 
-  // Initialize devices on mount
+  // Initialize devices on mount and refresh device list
   useEffect(() => {
-    enumerateDevices();
-  }, [enumerateDevices]);
+    refreshDevices();
+  }, [refreshDevices]);
 
   // Get device arrays from availableDevices
   const audioDevices = availableDevices.filter(device => device.kind === 'audioinput');
@@ -276,30 +294,130 @@ const SettingsPanel: FC = () => {
     }
   }, [isTestingMic, selectedAudio, cleanupTestStream]);
 
+  // Test speaker functionality
+  const testSpeaker = useCallback(async () => {
+    if (isTestingSpeaker) return;
+
+    setIsTestingSpeaker(true);
+    try {
+      // Create a test audio element
+      const audio = new Audio();
+      audio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvGIkBSuS3/PCeiQCKHfH6tiJNwgZaLztu4xZFApFnt/wvmEkBSef3/C9eycEKXfH69uJNwgZaLzty4xZFApFnt/yvmEkBSec3/G9eykEKnfH6tuJOQgVaLrty4xaEglGnt3yvmEjBSed4O++eykEKnbG6tiKOgcVabrqy4xaEQlHntzyv2EjBied3/G7eysEKnbG6tmKOgcVabrqy4xaEQlHntzyv2EjBiWd3++7eysEKnXH6NmKOgcWabrqyotbEAlHoNzxv2IhBiad3++8eisFKnTH59iLOwcVabrpyotbEAlHoNzxwGIhBiad3++8eysFKnTH59iLOwcVabrpyotbEAlHoNzxwGIhBiaaDhGd';
+      
+      // Set audio output device if supported
+      if ('setSinkId' in audio && selectedSpeaker) {
+        try {
+          await (audio as HTMLAudioElement & { setSinkId: (deviceId: string) => Promise<void> }).setSinkId(selectedSpeaker);
+        } catch (error) {
+          console.warn('Failed to set audio output device:', error);
+        }
+      }
+      
+      audio.volume = 0.5;
+      await audio.play();
+      
+      toast.success('Speaker test played - you should hear a tone');
+      
+      // Stop test after audio finishes (about 1 second)
+      setTimeout(() => {
+        setIsTestingSpeaker(false);
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Speaker test failed:', error);
+      toast.error('Failed to test speaker');
+      setIsTestingSpeaker(false);
+    }
+  }, [isTestingSpeaker, selectedSpeaker]);
+
   // Handle device changes with real WebRTC functionality
   const handleCameraChange = useCallback(async (deviceId: string) => {
+    if (deviceId === selectedVideo) return; // No change needed
+    
     setSelectedVideo(deviceId);
     try {
       await switchCamera(deviceId);
       toast.success('Camera switched successfully');
+      
+      // Restart video preview if testing (without circular dependency)
+      if (isTestingCamera) {
+        cleanupTestStream();
+        // Restart test with new device
+        setTimeout(async () => {
+          try {
+            const constraints: MediaStreamConstraints = {
+              video: { deviceId }
+            };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            testStreamRef.current = stream;
+            if (videoPreviewRef.current) {
+              videoPreviewRef.current.srcObject = stream;
+            }
+          } catch (error) {
+            console.error('Failed to restart camera test:', error);
+          }
+        }, 500);
+      }
     } catch (error) {
       console.error('Failed to switch camera:', error);
       toast.error('Failed to switch camera');
+      // Revert selection on error
+      setSelectedVideo(currentDevices.camera || '');
     }
-  }, [switchCamera]);
+  }, [switchCamera, selectedVideo, currentDevices.camera, isTestingCamera, cleanupTestStream]);
 
   const handleMicrophoneChange = useCallback(async (deviceId: string) => {
+    if (deviceId === selectedAudio) return; // No change needed
+    
     setSelectedAudio(deviceId);
     try {
       await switchMicrophone(deviceId);
       toast.success('Microphone switched successfully');
+      
+      // Restart microphone test if testing (without circular dependency)
+      if (isTestingMic) {
+        cleanupTestStream();
+        // Restart test with new device
+        setTimeout(async () => {
+          try {
+            const constraints: MediaStreamConstraints = {
+              audio: { deviceId }
+            };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            testStreamRef.current = stream;
+            
+            // Restart audio level monitoring
+            audioContextRef.current = new AudioContext();
+            const analyser = audioContextRef.current.createAnalyser();
+            const microphone = audioContextRef.current.createMediaStreamSource(stream);
+            microphone.connect(analyser);
+            analyser.fftSize = 256;
+            
+            const updateLevel = () => {
+              if (!isTestingMic) return;
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+              analyser.getByteFrequencyData(dataArray);
+              const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+              setMicLevel(average);
+              requestAnimationFrame(updateLevel);
+            };
+            updateLevel();
+          } catch (error) {
+            console.error('Failed to restart microphone test:', error);
+          }
+        }, 500);
+      }
     } catch (error) {
       console.error('Failed to switch microphone:', error);
       toast.error('Failed to switch microphone');
+      // Revert selection on error
+      setSelectedAudio(currentDevices.microphone || '');
     }
-  }, [switchMicrophone]);
+  }, [switchMicrophone, selectedAudio, currentDevices.microphone, isTestingMic, cleanupTestStream]);
 
   const handleSpeakerChange = useCallback(async (deviceId: string) => {
+    if (deviceId === selectedSpeaker) return; // No change needed
+    
     setSelectedSpeaker(deviceId);
     try {
       await switchSpeaker(deviceId);
@@ -307,8 +425,10 @@ const SettingsPanel: FC = () => {
     } catch (error) {
       console.error('Failed to switch speaker:', error);
       toast.error('Failed to switch speaker');
+      // Revert selection on error
+      setSelectedSpeaker(currentDevices.speaker || '');
     }
-  }, [switchSpeaker]);
+  }, [switchSpeaker, selectedSpeaker, currentDevices.speaker]);
 
   // Save settings
   const saveSettings = useCallback(async () => {
@@ -394,6 +514,43 @@ const SettingsPanel: FC = () => {
       exit="exit"
       className="space-y-4"
     >
+      {/* Device Refresh Section */}
+      <SettingCard 
+        title="Device Management" 
+        description="Refresh device list and manage available devices"
+        icon={<Settings className="w-4 h-4 text-slate-400" />}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-slate-300">
+              Detected {videoDevices.length} camera(s), {audioDevices.length} microphone(s), {speakerDevices.length} speaker(s)
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Refresh if you&apos;ve connected new devices
+            </p>
+          </div>
+          <Button
+            onClick={refreshDevices}
+            disabled={isRefreshingDevices}
+            size="sm"
+            variant="outline"
+            className="bg-slate-600/50 border-slate-500 text-slate-200"
+          >
+            {isRefreshingDevices ? (
+              <>
+                <RefreshCw className="w-3 h-3 mr-2 animate-spin" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3 mr-2" />
+                Refresh Devices
+              </>
+            )}
+          </Button>
+        </div>
+      </SettingCard>
+
       {/* WebRTC Error Display */}
       {webrtcError && (
         <motion.div
@@ -430,7 +587,12 @@ const SettingsPanel: FC = () => {
               <SelectContent>
                 {videoDevices.map((device) => (
                   <SelectItem key={device.deviceId} value={device.deviceId}>
-                    {device.label}
+                    <div className="flex items-center justify-between w-full">
+                      <span>{device.label}</span>
+                      {device.deviceId === currentDevices.camera && (
+                        <span className="text-green-400 text-xs">Current</span>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -521,7 +683,12 @@ const SettingsPanel: FC = () => {
               <SelectContent>
                 {audioDevices.map((device) => (
                   <SelectItem key={device.deviceId} value={device.deviceId}>
-                    {device.label}
+                    <div className="flex items-center justify-between w-full">
+                      <span>{device.label}</span>
+                      {device.deviceId === currentDevices.microphone && (
+                        <span className="text-green-400 text-xs">Current</span>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -619,11 +786,38 @@ const SettingsPanel: FC = () => {
             <SelectContent>
               {speakerDevices.map((device) => (
                 <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label}
+                  <div className="flex items-center justify-between w-full">
+                    <span>{device.label}</span>
+                    {device.deviceId === currentDevices.speaker && (
+                      <span className="text-green-400 text-xs">Current</span>
+                    )}
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              onClick={testSpeaker}
+              disabled={isTestingSpeaker || speakerDevices.length === 0}
+              size="sm"
+              variant="outline"
+              className="bg-slate-600/50 border-slate-500 text-slate-200"
+            >
+              {isTestingSpeaker ? (
+                <>
+                  <RefreshCw className="w-3 h-3 mr-2 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                <>
+                  <TestTube className="w-3 h-3 mr-2" />
+                  Test Speaker
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </SettingCard>
     </motion.div>

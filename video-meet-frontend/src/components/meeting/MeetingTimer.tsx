@@ -5,6 +5,7 @@ import { FC, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
 import { RootState } from "@/store";
+import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { Clock } from "lucide-react";
 
 interface MeetingTimerProps {
@@ -15,13 +16,12 @@ const MeetingTimer: FC<MeetingTimerProps> = ({ className }) => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
   
-  // Get meeting start time from Redux store
-  const meetingStartTime = useSelector((state: RootState) => 
-    state.meeting.recordingStartedAt
-  );
-  const meetingStatus = useSelector((state: RootState) => 
-    state.meeting.isScreenSharing ? 'active' : 'inactive'
-  );
+  // Get meeting data from meeting hook
+  const { meeting, isInMeeting } = useMeetingCore();
+  
+  // Get meeting start time from meeting data
+  const meetingStartTime = meeting?.startedAt;
+  const meetingStatus = isInMeeting ? 'active' : 'inactive';
 
   useEffect(() => {
     let interval: NodeJS.Timeout;

@@ -16,6 +16,7 @@ import type {
 } from "@/types/meeting";
 import { useSelector } from "react-redux";
 import { RootState } from "@/store";
+import { useMeetingRedux, useMeetingReduxSync } from "./useMeetingRedux";
 
 const WS_EVENTS = WEBSOCKET_CONFIG.events;
 
@@ -55,8 +56,6 @@ interface UseMeetingCoreReturn {
   participants: MeetingParticipant[];
   participantCount: number;
   localParticipant: MeetingParticipant | null;
-  onlineParticipants: MeetingParticipant[];
-  offlineParticipants: MeetingParticipant[];
 
   // Core actions
   createMeeting: (
@@ -126,15 +125,26 @@ export const useMeetingCore = (
   const { socket, isConnected, emit, on } = useSocket();
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
 
-  // Core meeting state
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [participants, setParticipants] = useState<MeetingParticipant[]>([]);
-  const [localParticipant, setLocalParticipant] =
-    useState<MeetingParticipant | null>(null);
-  const [meetingError, setMeetingError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [meetingDuration, setMeetingDuration] = useState(0);
+  // Redux integration
+  const reduxState = useMeetingRedux();
+  const reduxSync = useMeetingReduxSync();
+
+  // Local state for data mode (when not in active meeting)
+  const [dataMeeting, setDataMeeting] = useState<Meeting | null>(null);
+  const [dataParticipants, setDataParticipants] = useState<MeetingParticipant[]>([]);
+  const [dataLocalParticipant, setDataLocalParticipant] = useState<MeetingParticipant | null>(null);
+  const [dataIsLoading, setDataIsLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [dataMeetingDuration, setDataMeetingDuration] = useState(0);
+
+  // Use Redux state for live meetings, local state for data mode
+  const meeting = dataMode ? dataMeeting : reduxState.meeting;
+  const participants = dataMode ? dataParticipants : reduxState.participants;
+  const localParticipant = dataMode ? dataLocalParticipant : reduxState.localParticipant;
+  const meetingError = dataMode ? dataError : reduxState.error;
+  const isLoading = dataMode ? dataIsLoading : reduxState.isLoading;
+  const error = dataMode ? dataError : reduxState.error;
+  const meetingDuration = dataMode ? dataMeetingDuration : reduxState.meetingDuration;
 
   // Refs for tracking
   const meetingStartTimeRef = useRef<Date | null>(null);
@@ -142,16 +152,15 @@ export const useMeetingCore = (
   const joinAttemptRef = useRef<boolean>(false);
   const mountedRef = useRef(true);
 
-  // Computed state
-  const isInMeeting =
-    !dataMode && !!meeting && meeting.status === "active" && !!localParticipant;
-  const isHost = meeting?.hostId === user?.id;
-  const isModerator =
-    localParticipant?.role === "host" || localParticipant?.role === "moderator";
+  // Computed state using Redux values
+  const isInMeeting = reduxState.isInMeeting || (!dataMode && !!meeting && meeting.status === "active" && !!localParticipant);
+  const isHost = reduxState.isHost || (meeting?.hostId === user?.id);
+  const isModerator = reduxState.canModerate || (localParticipant?.role === "host" || localParticipant?.role === "moderator");
   const meetingStatus = meeting?.status || "waiting";
-  const participantCount = participants.length;
-  const onlineParticipants = participants.filter((p) => p.isActive);
-  const offlineParticipants = participants.filter((p) => !p.isActive);
+  const participantCount = reduxState.participantCount || participants.length;
+  // Note: isActive property is not defined in the MeetingParticipant interface
+  // const onlineParticipants = participants.filter((p) => p.isActive ?? true);
+  // const offlineParticipants = participants.filter((p) => !(p.isActive ?? true));
 
   /**
    * Enhanced logging
@@ -179,9 +188,12 @@ export const useMeetingCore = (
    * Clear error helper
    */
   const clearError = useCallback(() => {
-    setError(null);
-    setMeetingError(null);
-  }, []);
+    if (dataMode) {
+      setDataError(null);
+    } else {
+      reduxState.clearErrorState();
+    }
+  }, [dataMode, reduxState]);
 
   /**
    * Fetch meeting data for data mode
@@ -196,7 +208,7 @@ export const useMeetingCore = (
 
       try {
         logMeetingAction("FETCH_MEETING_DATA_START", { roomId: targetRoomId });
-        setIsLoading(true);
+        setDataIsLoading(true);
         clearError();
 
         // Fetch meeting by room ID
@@ -209,7 +221,7 @@ export const useMeetingCore = (
         }
 
         const meetingData = meetingResponse.data.meeting;
-        setMeeting(meetingData);
+        setDataMeeting(meetingData);
 
         // Calculate duration from start/end times
         if (meetingData.startedAt && meetingData.endedAt) {
@@ -218,9 +230,9 @@ export const useMeetingCore = (
               new Date(meetingData.startedAt).getTime()) /
               1000
           );
-          setMeetingDuration(duration);
+          setDataMeetingDuration(duration);
         } else if (meetingData.duration) {
-          setMeetingDuration(meetingData.duration);
+          setDataMeetingDuration(meetingData.duration);
         }
 
         // Fetch participants
@@ -234,19 +246,19 @@ export const useMeetingCore = (
             participantsResponse.data?.participants
           ) {
             const participantList = participantsResponse.data.participants;
-            setParticipants(participantList);
+            setDataParticipants(participantList);
 
             // Find local participant if user was in the meeting
             if (user) {
               const userParticipant = participantList.find(
                 (p) => p.userId === user.id || p.email === user.email
               );
-              setLocalParticipant(userParticipant || null);
+              setDataLocalParticipant(userParticipant || null);
             }
           }
         } catch (error) {
           console.warn("Failed to fetch participants:", error);
-          setParticipants([]);
+          setDataParticipants([]);
         }
 
         logMeetingAction("FETCH_MEETING_DATA_SUCCESS", {
@@ -259,11 +271,10 @@ export const useMeetingCore = (
           error.message ||
           "Failed to fetch meeting data";
         logMeetingAction("FETCH_MEETING_DATA_ERROR", { error: errorMessage });
-        setError(errorMessage);
-        setMeetingError(errorMessage);
+        setDataError(errorMessage);
         return { success: false, error: errorMessage };
       } finally {
-        setIsLoading(false);
+        setDataIsLoading(false);
       }
     },
     [dataMode, user, clearError, logMeetingAction]
@@ -304,13 +315,11 @@ export const useMeetingCore = (
     meetingStartTimeRef.current = new Date();
     durationIntervalRef.current = setInterval(() => {
       if (meetingStartTimeRef.current && mountedRef.current) {
-        const duration = Math.floor(
-          (Date.now() - meetingStartTimeRef.current.getTime()) / 1000
-        );
-        setMeetingDuration(duration);
+        // Update timer timestamp to force re-renders of duration selectors
+        reduxState.updateTimerTimestamp();
       }
     }, 1000);
-  }, [dataMode]);
+  }, [dataMode, reduxState]);
 
   /**
    * Stop meeting duration timer
@@ -324,49 +333,116 @@ export const useMeetingCore = (
   }, []);
 
   /**
+   * State setter functions for compatibility with other hooks
+   */
+  const setMeeting = useCallback((meeting: Meeting | null) => {
+    if (dataMode) {
+      setDataMeeting(meeting);
+    } else {
+      // In live mode, meeting state is managed by Redux through actions
+      // This is mainly for compatibility - actual updates should use Redux actions
+    }
+  }, [dataMode]);
+
+  const setParticipants = useCallback((
+    participants: MeetingParticipant[] | ((prev: MeetingParticipant[]) => MeetingParticipant[])
+  ) => {
+    if (dataMode) {
+      if (typeof participants === 'function') {
+        setDataParticipants(participants);
+      } else {
+        setDataParticipants(participants);
+      }
+    } else {
+      // In live mode, participants are managed by Redux
+      // This is mainly for compatibility
+    }
+  }, [dataMode]);
+
+  const setLocalParticipant = useCallback((participant: MeetingParticipant | null) => {
+    if (dataMode) {
+      setDataLocalParticipant(participant);
+    } else {
+      // In live mode, local participant is managed by Redux
+      // This is mainly for compatibility
+    }
+  }, [dataMode]);
+
+  const setIsLoading = useCallback((loading: boolean) => {
+    if (dataMode) {
+      setDataIsLoading(loading);
+    } else {
+      // In live mode, loading state is managed by Redux actions
+      // This is mainly for compatibility
+    }
+  }, [dataMode]);
+
+  const setError = useCallback((error: string | null) => {
+    if (dataMode) {
+      setDataError(error);
+    } else {
+      reduxState.setErrorState(error || '');
+    }
+  }, [dataMode, reduxState]);
+
+  const setMeetingError = useCallback((error: string | null) => {
+    if (dataMode) {
+      setDataError(error);
+    } else {
+      reduxState.setErrorState(error || '');
+    }
+  }, [dataMode, reduxState]);
+
+  /**
    * Participant management functions
    */
   const updateParticipant = useCallback(
     (participantId: string, updates: Partial<MeetingParticipant>) => {
       if (dataMode) return; // Read-only in data mode
 
-      setParticipants((prev) =>
-        prev.map((p) =>
-          p.id === participantId || p.userId === participantId
-            ? { ...p, ...updates }
-            : p
-        )
-      );
+      // Update both Redux and local state for compatibility
+      if (updates.mediaState) {
+        reduxSync.syncMediaState(participantId, updates.mediaState);
+      }
+      if (updates.connectionQuality) {
+        reduxSync.syncConnectionQuality(participantId, updates.connectionQuality);
+      }
+      
+      // For other updates, we still need to keep the existing logic
+      // until all components are fully migrated to Redux
+      // TODO: Remove this when all components use Redux
+      if (!reduxState.isInMeeting) {
+        // Legacy state update for data mode
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.id === participantId || p.userId === participantId
+              ? { ...p, ...updates }
+              : p
+          )
+        );
+      }
     },
-    [dataMode]
+    [dataMode, reduxSync, reduxState.isInMeeting]
   );
 
   const addParticipant = useCallback(
     (participant: MeetingParticipant) => {
       if (dataMode) return; // Read-only in data mode
 
-      setParticipants((prev) => {
-        const exists = prev.some(
-          (p) => p.id === participant.id || p.userId === participant.userId
-        );
-        if (!exists) {
-          return [...prev, participant];
-        }
-        return prev;
-      });
+      // Add to Redux store for live meetings
+      reduxSync.syncParticipantJoined(participant);
     },
-    [dataMode]
+    [dataMode, reduxSync]
   );
 
   const removeParticipantFromList = useCallback(
     (participantId: string) => {
       if (dataMode) return; // Read-only in data mode
 
-      setParticipants((prev) =>
-        prev.filter((p) => p.id !== participantId && p.userId !== participantId)
-      );
+      // Remove from Redux store for live meetings
+      reduxSync.syncParticipantLeft(participantId);
     },
-    [dataMode]
+    [dataMode, reduxSync]
   );
 
   /**
@@ -395,7 +471,6 @@ export const useMeetingCore = (
             allowScreenShare: true,
             allowRecording: false,
             muteParticipantsOnJoin: false,
-            requirePassword: false,
             maxParticipants: 100,
             enableWaitingRoom: false,
             autoStartRecording: false,
@@ -501,10 +576,8 @@ export const useMeetingCore = (
 
         const participant = joinResponse.data.participant;
 
-        // Set meeting and participant data
-        setMeeting(meetingData);
-        setLocalParticipant(participant);
-        addParticipant(participant);
+        // Set meeting and participant data in Redux
+        reduxSync.syncMeeting(meetingData, participant);
 
         // Join socket room if connected
         if (isConnected && socket) {
@@ -564,7 +637,7 @@ export const useMeetingCore = (
 
       if (!meeting) return;
 
-      setIsLoading(true);
+      // Note: Redux loading state is handled by the actions
       stopDurationTimer();
 
       // Leave via API
@@ -588,13 +661,8 @@ export const useMeetingCore = (
         });
       }
 
-      // Clear state
-      setMeeting(null);
-      setParticipants([]);
-      setLocalParticipant(null);
-      setMeetingDuration(0);
-      setError(null);
-      setMeetingError(null);
+      // Clear Redux state
+      reduxSync.syncLeaveMeeting();
       joinAttemptRef.current = false;
 
       toast.success("Left meeting");
@@ -602,13 +670,11 @@ export const useMeetingCore = (
     } catch (error) {
       logMeetingAction("LEAVE_MEETING_ERROR", { error });
 
-      // Clear state even if operations fail
-      setMeeting(null);
-      setParticipants([]);
-      setLocalParticipant(null);
+      // Clear Redux state even if operations fail
+      reduxSync.syncLeaveMeeting();
       joinAttemptRef.current = false;
     } finally {
-      setIsLoading(false);
+      // Note: Redux loading state is handled by the actions
     }
   }, [
     dataMode,
@@ -840,12 +906,12 @@ export const useMeetingCore = (
 
       const baseUrl = `${window.location.origin}/meeting/${meeting.roomId}`;
 
-      if (
-        includePassword &&
-        meeting.settings?.requirePassword &&
-        meeting.settings?.password
-      ) {
-        return `${baseUrl}?password=${meeting.settings.password}`;
+      // Check if meeting has password (handle different interface types)
+      const hasPassword = (meeting.settings as any)?.requirePassword || (meeting as any).password;
+      const passwordValue = (meeting.settings as any)?.password || (meeting as any).password;
+      
+      if (includePassword && hasPassword && passwordValue) {
+        return `${baseUrl}?password=${passwordValue}`;
       }
 
       return baseUrl;
@@ -855,7 +921,7 @@ export const useMeetingCore = (
 
   const getParticipantById = useCallback(
     (id: string): MeetingParticipant | undefined => {
-      return participants.find((p) => p.id === id || p.userId === id);
+      return participants.find((p) => p.id === id || p.userId === id) as MeetingParticipant | undefined;
     },
     [participants]
   );
@@ -875,7 +941,7 @@ export const useMeetingCore = (
 
   return {
     // Meeting state
-    meeting,
+    meeting: meeting as Meeting | null,
     isInMeeting,
     isHost,
     isModerator,
@@ -883,11 +949,10 @@ export const useMeetingCore = (
     meetingError,
 
     // Participants
-    participants,
+    participants: participants as MeetingParticipant[],
     participantCount,
-    localParticipant,
-    onlineParticipants,
-    offlineParticipants,
+    localParticipant: localParticipant as MeetingParticipant | null,
+    // Note: onlineParticipants and offlineParticipants removed due to interface mismatch
 
     // Core actions
     createMeeting,

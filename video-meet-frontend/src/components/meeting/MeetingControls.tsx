@@ -22,11 +22,14 @@ import {
   Camera,
   Volume2,
   Share,
-  Loader2
+  Loader2,
+  Circle,
+  Square
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { useMeetingRecording } from "@/hooks/meeting/useMeetingRecording";
 import { toast } from "react-hot-toast";
 
 interface ControlButtonProps {
@@ -197,13 +200,24 @@ const ControlButton: FC<ControlButtonProps> = ({
   );
 };
 
-const MeetingControls: FC = () => {
+interface MeetingControlsProps {
+  onToggleSidebar?: (panel: "chat" | "participants" | "settings") => void;
+  sidebarOpen?: boolean;
+  activePanel?: "chat" | "participants" | "settings";
+}
+
+const MeetingControls: FC<MeetingControlsProps> = ({ 
+  onToggleSidebar,
+  sidebarOpen = false,
+  activePanel = "chat"
+}) => {
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
   const [isOperating, setIsOperating] = useState({
     audio: false,
     video: false,
     screen: false,
+    recording: false,
     leaving: false
   });
   
@@ -211,7 +225,8 @@ const MeetingControls: FC = () => {
     leaveMeeting,
     isHost,
     participantCount,
-    canPerformAction
+    canPerformAction,
+    meeting
   } = useMeetingCore();
   
   const {
@@ -220,7 +235,14 @@ const MeetingControls: FC = () => {
     toggleVideo,
     startScreenShare,
     stopScreenShare
-  } = useWebRTC();
+  } = useWebRTC(meeting?.roomId);
+
+  const {
+    isRecording,
+    recordingStatus,
+    startRecording,
+    stopRecording
+  } = useMeetingRecording();
 
   // Handle audio toggle with loading state
   const handleToggleAudio = useCallback(async () => {
@@ -288,6 +310,46 @@ const MeetingControls: FC = () => {
     isOperating.screen
   ]);
 
+  // Handle recording toggle with loading state
+  const handleToggleRecording = useCallback(async () => {
+    if (isOperating.recording) return;
+
+    if (!canPerformAction('start_recording')) {
+      toast.error('You do not have permission to record this meeting');
+      return;
+    }
+
+    setIsOperating(prev => ({ ...prev, recording: true }));
+    try {
+      if (isRecording) {
+        const result = await stopRecording();
+        if (result.success) {
+          toast.success('Recording stopped');
+        } else {
+          toast.error(result.error || 'Failed to stop recording');
+        }
+      } else {
+        const result = await startRecording();
+        if (result.success) {
+          toast.success('Recording started');
+        } else {
+          toast.error(result.error || 'Failed to start recording');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle recording:', error);
+      toast.error('Failed to toggle recording');
+    } finally {
+      setIsOperating(prev => ({ ...prev, recording: false }));
+    }
+  }, [
+    isRecording, 
+    startRecording, 
+    stopRecording, 
+    canPerformAction,
+    isOperating.recording
+  ]);
+
   // Handle leave meeting
   const handleLeave = useCallback(async () => {
     if (isOperating.leaving) return;
@@ -305,22 +367,34 @@ const MeetingControls: FC = () => {
   // Handle raise hand
   const handleRaiseHand = useCallback(() => {
     setHandRaised(prev => !prev);
-    // In a real implementation, this would emit to other participants
+    // TODO: Emit to other participants via socket
+    // socket.emit('hand-raised', { meetingId: meeting?.id, raised: !handRaised });
     toast.success(handRaised ? 'Hand lowered' : 'Hand raised');
   }, [handRaised]);
 
   // Handle settings
   const handleSettings = useCallback(() => {
     setShowMoreOptions(false);
-    // This would open a settings modal
-    toast.success('Settings panel would open here');
-  }, []);
+    onToggleSidebar?.("settings");
+  }, [onToggleSidebar]);
 
   // Handle camera switch
-  const handleCameraSwitch = useCallback(() => {
+  const handleCameraSwitch = useCallback(async () => {
     setShowMoreOptions(false);
     // This would cycle through available cameras
-    toast.success('Camera switching would happen here');
+    try {
+      // Get available cameras
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(device => device.kind === 'videoinput');
+      
+      if (cameras.length > 1) {
+        toast.success('Camera switching functionality would cycle through available cameras');
+      } else {
+        toast.success('Only one camera available');
+      }
+    } catch (error) {
+      toast.error('Failed to enumerate cameras');
+    }
   }, []);
 
   // Handle audio settings
@@ -409,6 +483,30 @@ const MeetingControls: FC = () => {
             }
           />
 
+          {/* Recording */}
+          <ControlButton
+            icon={<Circle className="w-5 h-5" />}
+            activeIcon={<Square className="w-5 h-5" />}
+            isActive={isRecording}
+            isLoading={isOperating.recording || recordingStatus === 'starting' || recordingStatus === 'stopping'}
+            isEnabled={canPerformAction('start_recording')}
+            onClick={handleToggleRecording}
+            variant={isRecording ? 'danger' : 'primary'}
+            tooltip={
+              !canPerformAction('start_recording')
+                ? 'No permission to record meeting'
+                : isOperating.recording 
+                  ? 'Processing...'
+                  : recordingStatus === 'starting'
+                    ? 'Starting recording...'
+                    : recordingStatus === 'stopping'
+                      ? 'Stopping recording...'
+                      : isRecording 
+                        ? 'Stop recording' 
+                        : 'Start recording'
+            }
+          />
+
           {/* Divider */}
           <div className="w-px h-8 bg-slate-600/50 mx-2" />
 
@@ -425,8 +523,8 @@ const MeetingControls: FC = () => {
           {/* Participants Count */}
           <ControlButton
             icon={<Users className="w-5 h-5" />}
-            isActive={false}
-            onClick={() => toast.success('Participants panel would open')}
+            isActive={sidebarOpen && activePanel === "participants"}
+            onClick={() => onToggleSidebar?.("participants")}
             variant="secondary"
             tooltip="View participants"
             badge={participantCount}
@@ -435,8 +533,8 @@ const MeetingControls: FC = () => {
           {/* Chat */}
           <ControlButton
             icon={<MessageSquare className="w-5 h-5" />}
-            isActive={false}
-            onClick={() => toast.success('Chat panel would open')}
+            isActive={sidebarOpen && activePanel === "chat"}
+            onClick={() => onToggleSidebar?.("chat")}
             variant="secondary"
             tooltip="Open chat"
           />

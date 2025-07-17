@@ -2,22 +2,21 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMeeting } from "@/hooks/meeting/useMeeting";
 import { useAuth } from "@/hooks/useAuth";
+import { useWebRTC } from "@/hooks/useWebRTC";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-// import MeetingHeader from "@/components/meeting/MeetingHeader";
-// import VideoGrid from "@/components/meeting/VideoGrid";
-// import MeetingControls from "@/components/meeting/MeetingControls";
+import MeetingHeader from "@/components/meeting/MeetingHeader";
+import VideoGrid from "@/components/meeting/VideoGrid";
+import MeetingControls from "@/components/meeting/MeetingControls";
 import ChatPanel from "@/components/meeting/ChatPanel";
-// import SettingsPanel from "@/components/meeting/SettingsPanel";
-// import NotificationToast from "@/components/common/NotificationToast";
-// import MeetingEndModal from "@/components/meeting/MeetingEndModal";
-// import ParticipantList from "@/components/meeting/ParticipantList";
-// import MeetingRecordingIndicator from "@/components/meeting/MeetingRecordingIndicator";
-// import MeetingTimer from "@/components/meeting/MeetingTimer";
+import SettingsPanel from "@/components/meeting/SettingsPanel";
+import ParticipantList from "@/components/meeting/ParticipantList";
+import MeetingRecordingIndicator from "@/components/meeting/MeetingRecordingIndicator";
+import MeetingTimer from "@/components/meeting/MeetingTimer";
 import { 
     MessageSquare, 
     Users, 
@@ -78,6 +77,13 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
         isLoading,
         error: meetingError
     } = useMeeting(roomId);
+    
+    // Initialize WebRTC
+    const { 
+        initializeMedia,
+        isInitialized,
+        error: webrtcError
+    } = useWebRTC(roomId);
 
     // Component state
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -90,6 +96,18 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
     // CRITICAL: Add a ref to track if we've already attempted to join
     const hasAttemptedJoin = useRef(false);
     const joinAttemptCount = useRef(0);
+
+    // Handle sidebar panel toggling
+    const handleToggleSidebar = useCallback((panel: "chat" | "participants" | "settings") => {
+        if (isSidebarOpen && activePanel === panel) {
+            // If the same panel is clicked and sidebar is open, close it
+            setIsSidebarOpen(false);
+        } else {
+            // Otherwise, open the sidebar and set the active panel
+            setActivePanel(panel);
+            setIsSidebarOpen(true);
+        }
+    }, [isSidebarOpen, activePanel]);
 
     // Debug logging for state changes
     useEffect(() => {
@@ -137,6 +155,15 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
         console.log('📞 Attempting to join meeting:', roomId);
 
         try {
+            // Initialize media first
+            console.log('🎥 Initializing media...');
+            const mediaInitialized = await initializeMedia();
+            if (!mediaInitialized) {
+                throw new Error('Failed to initialize media devices');
+            }
+            
+            // Then join the meeting
+            console.log('🚪 Joining meeting...');
             const result = await joinMeeting({
                 roomId,
                 autoEnableAudio: true,
@@ -259,8 +286,8 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
     // Panel tabs configuration
     const panelTabs = [
         { id: "chat", label: "Chat", icon: MessageSquare },
-        // { id: "participants", label: "People", icon: Users, badge: participants.length },
-        // { id: "settings", label: "Settings", icon: Settings },
+        { id: "participants", label: "People", icon: Users, badge: participants.length },
+        { id: "settings", label: "Settings", icon: Settings },
     ];
 
     // Loading state while joining
@@ -286,7 +313,7 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
     }
 
     // Error state
-    if (joinError || meetingError) {
+    if (joinError || meetingError || webrtcError) {
         return (
             <div className="h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
                 <motion.div
@@ -300,7 +327,7 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
                         Unable to Join Meeting
                     </h2>
                     <p className="text-slate-400 mb-6">
-                        {joinError || meetingError}
+                        {joinError || meetingError || webrtcError}
                     </p>
                     <div className="flex gap-3 justify-center">
                         <Button
@@ -337,8 +364,10 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
             <div>Join Attempts: {joinAttemptCount.current}</div>
             <div>Participants: {participants.length}</div>
             <div>Meeting Status: {meeting?.status || 'none'}</div>
+            <div>WebRTC Initialized: {isInitialized ? '✅' : '❌'}</div>
             <div>Join Error: {joinError || 'none'}</div>
             <div>Meeting Error: {meetingError || 'none'}</div>
+            <div>WebRTC Error: {webrtcError || 'none'}</div>
         </div>
     );
 
@@ -370,27 +399,29 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
                 initial="hidden"
                 animate="visible"
             >
-                {/* Simplified Header */}
-                <div className="flex justify-between items-center px-6 py-4 bg-slate-800/50 backdrop-blur-sm border-b border-slate-700/50">
-                    <h1 className="text-white text-xl font-semibold">Meeting Room: {roomId}</h1>
-                    <Button
-                        onClick={handleLeave}
-                        variant="destructive"
-                        size="sm"
-                    >
-                        Leave Meeting
-                    </Button>
+                {/* Meeting Header */}
+                <MeetingHeader onLeave={handleLeave} />
+
+                {/* Recording Indicator and Timer - positioned at top */}
+                <div className="absolute top-20 left-6 z-20 flex items-center gap-3">
+                    <MeetingRecordingIndicator />
+                    <MeetingTimer />
                 </div>
 
                 <div className="flex flex-1 overflow-hidden">
-                    {/* Main Content Area - Simplified */}
+                    {/* Main Content Area - Video Grid */}
                     <div className="flex-1 flex flex-col relative bg-slate-800/30">
-                        <div className="flex-1 flex items-center justify-center">
-                            <div className="text-center text-white">
-                                <h2 className="text-2xl font-bold mb-4">Video Grid Placeholder</h2>
-                                <p className="text-slate-400">Video components commented out for testing</p>
-                                <p className="text-slate-300 mt-2">Participants: {participants.length}</p>
-                            </div>
+                        <div className="flex-1 relative">
+                            <VideoGrid />
+                        </div>
+                        
+                        {/* Meeting Controls */}
+                        <div className="relative z-10">
+                            <MeetingControls 
+                                onToggleSidebar={handleToggleSidebar}
+                                sidebarOpen={isSidebarOpen}
+                                activePanel={activePanel}
+                            />
                         </div>
                     </div>
 
@@ -441,11 +472,11 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
                                         >
                                             <tab.icon className="w-4 h-4" />
                                             <span className="hidden sm:inline">{tab.label}</span>
-                                            {/* {tab.badge && tab.badge > 0 && (
+                                            {tab.badge && tab.badge > 0 && (
                                                 <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
                                                     {tab.badge}
                                                 </span>
-                                            )} */}
+                                            )}
                                             
                                             {activePanel === tab.id && (
                                                 <motion.div
@@ -458,7 +489,7 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
                                     ))}
                                 </div>
 
-                                {/* Panel Content - Only Chat */}
+                                {/* Panel Content */}
                                 <div className="flex-1 overflow-hidden">
                                     <AnimatePresence mode="wait">
                                         {activePanel === "chat" && (
@@ -471,6 +502,32 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
                                                 className="h-full"
                                             >
                                                 <ChatPanel meeting={meeting} participants={participants} isInMeeting={isInMeeting} />
+                                            </motion.div>
+                                        )}
+                                        
+                                        {activePanel === "participants" && (
+                                            <motion.div
+                                                key="participants"
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: -20 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="h-full"
+                                            >
+                                                <ParticipantList />
+                                            </motion.div>
+                                        )}
+                                        
+                                        {activePanel === "settings" && (
+                                            <motion.div
+                                                key="settings"
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: -20 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="h-full"
+                                            >
+                                                <SettingsPanel />
                                             </motion.div>
                                         )}
                                     </AnimatePresence>

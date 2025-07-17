@@ -378,10 +378,25 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
       setAvailableDevices(devices);
     };
 
+    // Handle connection quality updates
+    webrtcManager.onConnectionQuality = (participantId: string, quality: ConnectionQualityInfo) => {
+      setParticipants((prev) => {
+        const updated = new Map(prev);
+        const participant = updated.get(participantId);
+        if (participant) {
+          updated.set(participantId, {
+            ...participant,
+            quality: quality,
+          });
+        }
+        return updated;
+      });
+    };
+
     return () => {
       webrtcManager.onRemoteStream = undefined;
       webrtcManager.onConnectionStateChange = undefined;
-      // Connection quality cleanup not needed
+      webrtcManager.onConnectionQuality = undefined;
       webrtcManager.onError = undefined;
       webrtcManager.onDevicesChanged = undefined;
     };

@@ -131,11 +131,11 @@ export const useMeetingEvents = (
 
     handleWebRTCSignal: useCallback(
       (data: any) => {
-        if (webrtc && data.from !== socket?.id) {
-          webrtc.handleSignalingData(data.from, data.signal, data.type);
-        }
+        // WebRTC signals are handled by the useWebRTC hook directly
+        // This handler is kept for consistency but doesn't duplicate the work
+        console.log("WebRTC signal received in meeting events (handled by useWebRTC):", data.type);
       },
-      [webrtc, socket?.id]
+      []
     ),
 
     handleConnectionQuality: useCallback(
@@ -170,6 +170,22 @@ export const useMeetingEvents = (
     handleWebRTCError: useCallback((data: any) => {
       toast.error(data.message || "Connection error");
     }, []),
+
+    handleJoinMeetingSuccess: useCallback(
+      (data: any) => {
+        // Handle existing participants and establish WebRTC connections
+        if (data.existingParticipants && webrtc) {
+          data.existingParticipants.forEach((participant: any) => {
+            console.log("🔗 Establishing WebRTC connection with existing participant:", participant.displayName);
+            // Add participant to the list
+            addParticipant(participant);
+            // Connect to existing participant (as caller)
+            webrtc.connectToPeer(participant.id, true);
+          });
+        }
+      },
+      [addParticipant, webrtc]
+    ),
   };
 
   /**
@@ -221,6 +237,10 @@ export const useMeetingEvents = (
       {
         event: WS_EVENTS.WEBRTC_ERROR,
         handler: stableHandlers.handleWebRTCError,
+      },
+      {
+        event: WS_EVENTS.JOIN_MEETING_SUCCESS,
+        handler: stableHandlers.handleJoinMeetingSuccess,
       },
     ];
 

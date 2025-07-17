@@ -143,7 +143,10 @@ export class SocketHandlers {
           },
         };
 
-        // Notify other participants
+        // Get existing participants in the meeting (excluding current user)
+        const existingParticipants = await this.getExistingParticipants(actualRoomId, socket.id);
+        
+        // Notify other participants about the new participant
         socket
           .to(`meeting:${actualRoomId}`)
           .emit(WS_EVENTS.PARTICIPANT_JOINED, {
@@ -151,10 +154,11 @@ export class SocketHandlers {
             meetingId: actualRoomId,
           });
 
-        // Confirm successful join
+        // Confirm successful join and send existing participants
         socket.emit(WS_EVENTS.JOIN_MEETING_SUCCESS, {
           meetingId: actualRoomId,
           participant,
+          existingParticipants,
         });
 
         console.log(`👥 User ${userEmail} joined meeting ${actualRoomId}`);
@@ -481,6 +485,36 @@ export class SocketHandlers {
         });
       }
     });
+  }
+
+  /**
+   * Get existing participants in a meeting (excluding current socket)
+   */
+  private async getExistingParticipants(meetingId: string, excludeSocketId?: string): Promise<any[]> {
+    try {
+      const sockets = await this.io.in(`meeting:${meetingId}`).fetchSockets();
+      
+      return sockets
+        .filter(socket => socket.id !== excludeSocketId)
+        .map(socket => {
+          const authSocket = socket as any; // Type assertion to access custom properties
+          return {
+            id: authSocket.participantId || socket.id,
+            socketId: socket.id,
+            displayName: authSocket.userName || 'Unknown',
+            email: authSocket.userEmail,
+            joinedAt: new Date().toISOString(),
+            mediaState: {
+              audioEnabled: true,
+              videoEnabled: true,
+              screenSharing: false,
+            },
+          };
+        });
+    } catch (error) {
+      console.error('Error getting existing participants:', error);
+      return [];
+    }
   }
 
   /**

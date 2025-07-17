@@ -1,8 +1,7 @@
 "use client";
 import { FC, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSelector } from "react-redux";
-import { RootState } from "@/store";
+import { useMeetingCore } from "@/hooks/meeting/useMeetingCore";
 import { 
   Search,
   UserPlus,
@@ -12,32 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ParticipantCard from "./ParticipantCard";
 
-// Use the interface from meetingSlice.ts
-interface MeetingParticipant {
-  id: string;
-  userId?: string;
-  displayName: string;
-  avatar?: string;
-  role: 'host' | 'moderator' | 'participant' | 'guest';
-  socketId?: string;
-  peerId?: string;
-  isLocal: boolean;
-  mediaState: {
-    audioEnabled: boolean;
-    videoEnabled: boolean;
-    screenSharing: boolean;
-    handRaised: boolean;
-  };
-  connectionQuality: {
-    latency?: number;
-    bandwidth?: number;
-    packetLoss?: number;
-    quality: 'poor' | 'fair' | 'good' | 'excellent';
-    lastUpdated: string;
-  };
-  joinedAt: string;
-  lastSeen: string;
-}
+import { MeetingParticipant } from "@/types/meeting";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -51,12 +25,12 @@ const containerVariants = {
 };
 
 const ParticipantList: FC = () => {
-  const participants = useSelector((state: RootState) => state.meeting.participants || {});
+  const { participants } = useMeetingCore();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null);
 
-  // Convert participants object to array
-  const allParticipants = Object.values(participants) as MeetingParticipant[];
+  // Convert participants to array format
+  const allParticipants = Array.isArray(participants) ? participants : Object.values(participants || {}) as MeetingParticipant[];
 
   // Filter participants based on search
   const filteredParticipants = allParticipants.filter(p =>
