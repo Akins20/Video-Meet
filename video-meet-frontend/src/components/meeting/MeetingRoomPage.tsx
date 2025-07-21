@@ -109,41 +109,27 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
         }
     }, [isSidebarOpen, activePanel]);
 
-    // Debug logging for state changes
+    // Optimize debug logging - only log critical changes
     useEffect(() => {
-        console.log('🔄 MeetingRoomPage State Update:', {
-            roomId,
-            isAuthenticated,
-            isInMeeting,
-            isJoining,
-            joinError,
-            meetingError,
-            isLoading,
-            hasAttemptedJoin: hasAttemptedJoin.current,
-            joinAttemptCount: joinAttemptCount.current,
-            meeting: meeting ? { id: meeting.id, status: meeting.status, roomId: meeting.roomId } : null,
-            participantCount: participants.length
-        });
-    }, [roomId, isAuthenticated, isInMeeting, isJoining, joinError, meetingError, isLoading, meeting, participants]);
+        if (process.env.NODE_ENV === 'development') {
+            console.log('🔄 MeetingRoomPage State:', {
+                isInMeeting,
+                participantCount: participants.length,
+                meetingStatus: meeting?.status
+            });
+        }
+    }, [isInMeeting, participants.length, meeting?.status]);
 
-    // Handle joining the meeting
-    const handleJoinMeeting = async () => {
-        console.log('🚀 handleJoinMeeting called', {
-            isJoining,
-            hasAttemptedJoin: hasAttemptedJoin.current,
-            joinAttemptCount: joinAttemptCount.current
-        });
-
+    // Handle joining the meeting - FIXED
+    const handleJoinMeeting = useCallback(async () => {
         // Prevent multiple simultaneous join attempts
         if (isJoining || hasAttemptedJoin.current) {
-            console.log('⚠️ Skipping join attempt - already joining or attempted');
             return;
         }
 
         // Safety check for too many attempts
-        if (joinAttemptCount.current >= 3) {
-            console.log('❌ Too many join attempts, giving up');
-            setJoinError('Too many join attempts. Please refresh and try again.');
+        if (joinAttemptCount.current >= 1) {  // Reduced from 3 to 1
+            setJoinError('Join attempt failed. Please refresh to try again.');
             return;
         }
 
@@ -152,97 +138,65 @@ export default function MeetingRoomPage({ roomId }: MeetingRoomPageProps) {
         setIsJoining(true);
         setJoinError(null);
 
-        console.log('📞 Attempting to join meeting:', roomId);
-
         try {
             // Initialize media first
-            console.log('🎥 Initializing media...');
             const mediaInitialized = await initializeMedia();
             if (!mediaInitialized) {
                 throw new Error('Failed to initialize media devices');
             }
             
             // Then join the meeting
-            console.log('🚪 Joining meeting...');
             const result = await joinMeeting({
                 roomId,
                 autoEnableAudio: true,
                 autoEnableVideo: true
             });
 
-            console.log('📞 Join meeting result:', result);
-
             if (!result.success) {
-                console.error('❌ Failed to join meeting:', result.error);
                 setJoinError(result.error || 'Failed to join meeting');
                 toast.error(result.error || 'Failed to join meeting');
                 hasAttemptedJoin.current = false; // Allow retry on failure
             } else {
-                console.log('✅ Successfully joined meeting');
                 toast.success('Successfully joined the meeting');
                 // Keep hasAttemptedJoin.current = true to prevent re-joining
             }
         } catch (error) {
-            console.error('💥 Exception during join meeting:', error);
             setJoinError('An unexpected error occurred');
             toast.error('Failed to join meeting');
             hasAttemptedJoin.current = false; // Allow retry on exception
         } finally {
             setIsJoining(false);
         }
-    };
+    }, [roomId]); // REMOVED circular dependencies
 
-    // Auto-join meeting when component mounts - FIXED VERSION
+    // Auto-join meeting when component mounts - FIXED
     useEffect(() => {
-        console.log('🎯 Auto-join effect triggered:', {
-            isAuthenticated,
-            hasAttemptedJoin: hasAttemptedJoin.current,
-            isInMeeting,
-            isJoining,
-            joinError,
-            meetingError
-        });
-
         if (!isAuthenticated) {
-            console.log('🔒 Not authenticated, redirecting to login');
             router.push('/login');
             return;
         }
 
-        // Only attempt to join if:
-        // 1. We haven't attempted before
-        // 2. We're not currently in a meeting
-        // 3. We're not currently joining
-        // 4. There's no join error
-        // 5. There's no meeting error
-        if (!hasAttemptedJoin.current && 
-            !isInMeeting && 
-            !isJoining && 
-            !joinError && 
-            !meetingError) {
-            console.log('✅ Conditions met for auto-join, initiating...');
+        // Only attempt to join once per room
+        if (!hasAttemptedJoin.current && !isInMeeting && !isJoining) {
             handleJoinMeeting();
-        } else {
-            console.log('⏭️ Skipping auto-join due to conditions not met');
         }
-    }, [isAuthenticated, roomId]); // Removed the problematic dependencies
-
-    // Separate effect to handle post-join state
-    useEffect(() => {
-        if (isInMeeting) {
-            console.log('🎉 Successfully in meeting, resetting join state');
-            setJoinError(null);
-            // Don't reset hasAttemptedJoin here to prevent re-joining
-        }
-    }, [isInMeeting]);
+    }, [isAuthenticated, roomId]); // REMOVED circular dependencies
 
     // Reset join state when roomId changes (user navigates to different room)
     useEffect(() => {
-        console.log('🔄 Room ID changed, resetting join state');
         hasAttemptedJoin.current = false;
         joinAttemptCount.current = 0;
         setJoinError(null);
+        setIsJoining(false);
     }, [roomId]);
+
+    // Reset join attempts on page load to allow fresh attempts
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            hasAttemptedJoin.current = false;
+            joinAttemptCount.current = 0;
+        }
+    }, []);
 
     // Handle leaving the meeting
     const handleLeave = () => {

@@ -254,14 +254,14 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     (window as any).store = store
         ; (window as any).persistor = persistor
 
-    // Log store changes in development
+    // Log store changes in development - REDUCED LOGGING
+    let logThrottle = 0
     store.subscribe(() => {
-        const state = store.getState()
-        console.group('🔄 Store Updated')
-        console.log('Auth State:', state.auth)
-        console.log('Meeting State:', state.meeting)
-        console.log('Participant State:', state.participant)
-        console.groupEnd()
+        // Only log every 10th update to reduce spam
+        if (++logThrottle % 10 === 0) {
+            const state = store.getState()
+            console.log('🔄 Store Update #' + logThrottle)
+        }
     })
 }
 

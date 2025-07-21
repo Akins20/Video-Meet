@@ -337,11 +337,19 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
       participantId: string,
       stream: MediaStream
     ) => {
+      console.log(`🎥 Remote stream received for participant ${participantId}`);
       setParticipants((prev) => {
         const updated = new Map(prev);
         const participant = updated.get(participantId);
         if (participant) {
           updated.set(participantId, { ...participant, stream });
+        } else {
+          // Create new participant entry if it doesn't exist
+          updated.set(participantId, {
+            stream,
+            connectionState: "connected",
+            quality: null,
+          });
         }
         return updated;
       });
@@ -352,6 +360,7 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
       participantId: string,
       state: RTCPeerConnectionState
     ) => {
+      console.log(`🔗 Connection state changed for ${participantId}: ${state}`);
       setParticipants((prev) => {
         const updated = new Map(prev);
         const participant = updated.get(participantId);
@@ -363,6 +372,15 @@ export const useWebRTC = (meetingId?: string): UseWebRTCReturn => {
         }
         return updated;
       });
+
+      // Emit connection state change to server if needed
+      if (meetingId && socket && state === "connected") {
+        emit(WS_EVENTS.CONNECTION_QUALITY, {
+          meetingId,
+          participantId: socket.id,
+          quality: { overall: "good", latency: 50, bandwidth: 1000 }
+        });
+      }
     };
 
     // Connection quality updates are handled through WebSocket events

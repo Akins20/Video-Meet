@@ -50,20 +50,15 @@ export const useMeetingMedia = (): UseMeetingMediaReturn => {
   const mountedRef = useRef(true);
 
   /**
-   * Enhanced logging for media
+   * Enhanced logging for media - OPTIMIZED
    */
   const logMediaAction = useCallback(
     (action: string, data?: any) => {
-      if (process.env.NODE_ENV === "development") {
-        console.log(`🎥 Media [${action}]:`, {
-          meetingId: meeting?.id,
-          participantId: localParticipant?.id,
-          mediaState: localMediaState,
-          ...data,
-        });
+      if (process.env.NODE_ENV === "development" && action !== "SETTING_UP_HANDLERS" && action !== "CLEANUP_HANDLERS") {
+        console.log(`🎥 Media [${action}]:`, data);
       }
     },
-    [meeting, localParticipant, localMediaState]
+    []
   );
 
   /**
@@ -276,19 +271,19 @@ export const useMeetingMedia = (): UseMeetingMediaReturn => {
   }, [localMediaState, raiseHand]);
 
   /**
-   * Set up media socket event handlers
+   * Set up media socket event handlers - OPTIMIZED
    */
+  const handlersSetupRef = useRef(false);
+  
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!socket || !isConnected || handlersSetupRef.current) return;
 
-    logMediaAction("SETTING_UP_HANDLERS");
+    handlersSetupRef.current = true;
 
     // Handle media state changes from other participants
     const handleMediaStateChange = on(
       WS_EVENTS.MEDIA_STATE_CHANGE,
       (data: any) => {
-        logMediaAction("MEDIA_STATE_CHANGE_RECEIVED", data);
-
         if (data.participantId && data.participantId !== localParticipant?.id) {
           updateParticipant(data.participantId, {
             mediaState: data.mediaState,
@@ -301,27 +296,9 @@ export const useMeetingMedia = (): UseMeetingMediaReturn => {
     const handleScreenShareStart = on(
       WS_EVENTS.SCREEN_SHARE_START,
       (data: any) => {
-        logMediaAction("SCREEN_SHARE_START_RECEIVED", data);
-
         if (data.participantId !== localParticipant?.id) {
-          const participant = updateParticipant(data.participantId, {
-            mediaState: {
-              screenSharing: true,
-              speaking: false,
-              audioEnabled: false,
-              videoEnabled: false,
-              audioMuted: false,
-              backgroundBlur: false,
-              noiseCancellation: false,
-              echoCancellation: false,
-              autoGainControl: false,
-              resolution: "",
-              frameRate: 0,
-              bitrate: 0,
-              adaptiveQuality: false,
-              currentQuality: "auto",
-              targetQuality: "auto",
-            },
+          updateParticipant(data.participantId, {
+            mediaState: { screenSharing: true },
           });
           toast.success("Screen sharing started by another participant");
         }
@@ -331,27 +308,9 @@ export const useMeetingMedia = (): UseMeetingMediaReturn => {
     const handleScreenShareStop = on(
       WS_EVENTS.SCREEN_SHARE_STOP,
       (data: any) => {
-        logMediaAction("SCREEN_SHARE_STOP_RECEIVED", data);
-
         if (data.participantId !== localParticipant?.id) {
           updateParticipant(data.participantId, {
-            mediaState: {
-              screenSharing: false,
-              speaking: false,
-              audioEnabled: false,
-              videoEnabled: false,
-              audioMuted: false,
-              backgroundBlur: false,
-              noiseCancellation: false,
-              echoCancellation: false,
-              autoGainControl: false,
-              resolution: "",
-              frameRate: 0,
-              bitrate: 0,
-              adaptiveQuality: false,
-              currentQuality: "auto",
-              targetQuality: "auto",
-            },
+            mediaState: { screenSharing: false },
           });
           toast.success("Screen sharing stopped");
         }
@@ -360,25 +319,17 @@ export const useMeetingMedia = (): UseMeetingMediaReturn => {
 
     // Handle media errors
     const handleMediaError = on(WS_EVENTS.MEDIA_ERROR, (data: any) => {
-      logMediaAction("MEDIA_ERROR_RECEIVED", data);
       toast.error(data.message || "Media error occurred");
     });
 
     return () => {
-      logMediaAction("CLEANUP_HANDLERS");
       handleMediaStateChange();
       handleScreenShareStart();
       handleScreenShareStop();
       handleMediaError();
+      handlersSetupRef.current = false;
     };
-  }, [
-    socket,
-    isConnected,
-    on,
-    localParticipant,
-    updateParticipant,
-    logMediaAction,
-  ]);
+  }, [socket, isConnected, on, updateParticipant]);
 
   /**
    * Reset media state when leaving meeting

@@ -223,33 +223,32 @@ const VideoGrid: FC<VideoGridProps> = ({ className }) => {
     useEffect(() => {
       if (!videoRef.current) return;
 
-      console.log(`🎥 Setting up video for participant ${participant.id}:`, {
-        isLocal: participant.isLocal,
-        hasLocalStream: !!localStream,
-        isVideoEnabled: participant.isVideoEnabled,
-        localStreamTracks: localStream?.getTracks().length || 0
-      });
+      const video = videoRef.current;
+      let stream: MediaStream | null = null;
 
       if (participant.isLocal && localStream && participant.isVideoEnabled) {
-        console.log(`🎥 Setting local stream for ${participant.id}`);
-        videoRef.current.srcObject = localStream;
-        videoRef.current.play().catch(e => console.error('Failed to play video:', e));
+        stream = localStream;
       } else if (!participant.isLocal) {
-        // Get remote stream from WebRTC participants
         const webrtcParticipant = webrtcParticipants.get(participant.id);
-        console.log(`🎥 Remote participant ${participant.id}:`, {
-          hasWebrtcParticipant: !!webrtcParticipant,
-          hasStream: !!webrtcParticipant?.stream,
-          isVideoEnabled: participant.isVideoEnabled
-        });
-        
         if (webrtcParticipant?.stream && participant.isVideoEnabled) {
-          console.log(`🎥 Setting remote stream for ${participant.id}`);
-          videoRef.current.srcObject = webrtcParticipant.stream;
-          videoRef.current.play().catch(e => console.error('Failed to play video:', e));
+          stream = webrtcParticipant.stream;
         }
       }
-    }, [participant, localStream, webrtcParticipants]);
+
+      if (stream && stream !== video.srcObject) {
+        video.srcObject = stream;
+        video.play().catch(console.error);
+      } else if (!stream && video.srcObject) {
+        video.srcObject = null;
+      }
+
+      // Cleanup on unmount
+      return () => {
+        if (video.srcObject) {
+          video.srcObject = null;
+        }
+      };
+    }, [participant.id, participant.isLocal, participant.isVideoEnabled, localStream, webrtcParticipants]);
 
     return (
       <motion.div

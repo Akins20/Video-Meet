@@ -120,6 +120,9 @@ export class SocketHandlers {
           return;
         }
 
+        // Clean up any duplicate participants for this user in this meeting
+        await this.cleanupDuplicateParticipant(actualRoomId, userId);
+
         // Join meeting room
         socket.join(`meeting:${actualRoomId}`);
         socket.currentMeetingId = actualRoomId;
@@ -274,6 +277,9 @@ export class SocketHandlers {
         this.io
           .to(`meeting:${actualMeetingId}`)
           .emit(WS_EVENTS.CHAT_MESSAGE, message);
+
+        // Also emit back to sender to ensure immediate UI update
+        socket.emit(WS_EVENTS.CHAT_MESSAGE, message);
 
         console.log(
           `💬 Chat message broadcasted in meeting ${actualMeetingId} from ${userEmail}`
@@ -561,17 +567,67 @@ export class SocketHandlers {
   private setupDisconnectHandler(socket: AuthenticatedSocket) {
     const { userId, userEmail } = socket;
 
-    socket.on("disconnect", (reason) => {
+    socket.on("disconnect", async (reason) => {
       console.log(
-        `🔌 User ${userEmail} disconnected: ${reason} (${socket.id})`
+        `❌ User ${userEmail} disconnected: ${reason} (${socket.id})`
       );
 
       const currentMeetingId = socket.currentMeetingId;
       const participantId = socket.participantId;
       
-      // Remove participant from socket mapping
+      // Clean up participant mapping
       if (participantId) {
         this.participantSocketMap.delete(participantId);
+      }
+
+      // Clean up any stale participant mappings for this user
+      for (const [pId, sId] of this.participantSocketMap.entries()) {
+        if (sId === socket.id) {
+          this.participantSocketMap.delete(pId);
+          console.log(`🧹 Cleaned up stale participant mapping: ${pId}`);
+        }
+      }
+
+      // ENHANCED: Clean up database participant record on disconnect
+      if (currentMeetingId && userId) {
+        try {
+          const { default: Participant } = await import('../models/Participant');
+          const { default: Meeting } = await import('../models/Meeting');
+          
+          // Find the active participant record for this socket session
+          const activeParticipant = await Participant.findOne({
+            meetingId: currentMeetingId,
+            userId: userId,
+            leftAt: { $exists: false }
+          }).sort({ joinedAt: -1 }); // Get the most recent session
+
+          if (activeParticipant) {
+            const now = new Date();
+            const sessionDuration = Math.floor(
+              (now.getTime() - new Date(activeParticipant.joinedAt).getTime()) / 1000
+            );
+
+            // End the database session
+            await Participant.updateOne(
+              { _id: activeParticipant._id },
+              {
+                leftAt: now,
+                sessionDuration: sessionDuration,
+                endReason: reason === 'client namespace disconnect' ? 'user_disconnect' : reason,
+              }
+            );
+
+            // Update meeting participant count
+            await Meeting.updateOne(
+              { roomId: currentMeetingId },
+              { $inc: { currentParticipants: -1 } }
+            );
+
+            console.log(`🗄️ Database cleanup: Ended session for user ${userId} in meeting ${currentMeetingId}`);
+          }
+        } catch (error) {
+          console.error('❌ Error cleaning up database on disconnect:', error);
+        }
       }
 
       // Notify meeting participants
@@ -584,6 +640,8 @@ export class SocketHandlers {
             reason,
             timestamp: new Date().toISOString(),
           });
+
+        console.log(`👋 Auto-removed ${userEmail} from meeting ${currentMeetingId} due to disconnect`);
       }
 
       // Broadcast user disconnection
@@ -659,6 +717,113 @@ export class SocketHandlers {
       totalParticipants,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  /**
+   * COMPREHENSIVE duplicate participant cleanup - handles both sockets AND database
+   */
+  private async cleanupDuplicateParticipant(meetingId: string, userId: string): Promise<void> {
+    try {
+      console.log(`🧹 Starting comprehensive cleanup for user ${userId} in meeting ${meetingId}`);
+      
+      // STEP 1: Clean up active socket connections
+      const socketsInRoom = await this.io.in(`meeting:${meetingId}`).fetchSockets();
+      const existingSockets = socketsInRoom.filter(socket => {
+        const authSocket = socket as any;
+        return authSocket.userId === userId;
+      });
+
+      console.log(`🔍 Found ${existingSockets.length} active socket connections for user ${userId}`);
+
+      // Clean up existing socket connections
+      for (const existingSocket of existingSockets) {
+        const authSocket = existingSocket as any;
+        
+        // Remove from participant mapping
+        if (authSocket.participantId) {
+          this.participantSocketMap.delete(authSocket.participantId);
+        }
+        
+        // Force disconnect the socket
+        existingSocket.leave(`meeting:${meetingId}`);
+        existingSocket.disconnect(true);
+        
+        console.log(`🧹 Disconnected duplicate socket ${existingSocket.id} for user ${userId}`);
+      }
+
+      // STEP 2: Clean up database participant records
+      const { default: Participant } = await import('../models/Participant');
+      
+      // Find all active participant records for this user in this meeting
+      const activeParticipants = await Participant.find({
+        meetingId: meetingId,
+        userId: userId,
+        leftAt: { $exists: false }
+      }).sort({ joinedAt: -1 });
+
+      console.log(`🔍 Found ${activeParticipants.length} active database participant records for user ${userId}`);
+
+      if (activeParticipants.length > 0) {
+        const now = new Date();
+        
+        // End all existing sessions for this user
+        const endSessionPromises = activeParticipants.map(async (participant) => {
+          const sessionDuration = Math.floor(
+            (now.getTime() - new Date(participant.joinedAt).getTime()) / 1000
+          );
+
+          return Participant.updateOne(
+            { _id: participant._id },
+            {
+              leftAt: now,
+              sessionDuration: sessionDuration,
+              endReason: 'replaced_by_new_session',
+            }
+          );
+        });
+
+        await Promise.all(endSessionPromises);
+
+        // Update meeting participant count
+        const { default: Meeting } = await import('../models/Meeting');
+        await Meeting.updateOne(
+          { roomId: meetingId },
+          { $inc: { currentParticipants: -activeParticipants.length } }
+        );
+
+        // Notify other participants about the cleanup
+        this.io.to(`meeting:${meetingId}`).emit(WS_EVENTS.PARTICIPANT_LEFT, {
+          participantId: userId,
+          userId: userId,
+          reason: 'duplicate_cleanup',
+          timestamp: now.toISOString(),
+        });
+
+        console.log(`🧹 Ended ${activeParticipants.length} duplicate database sessions for user ${userId}`);
+      }
+
+      // STEP 3: Clean up stale participant mappings
+      const staleEntries: string[] = [];
+      for (const [participantId, socketId] of this.participantSocketMap.entries()) {
+        if (participantId.startsWith(userId) || participantId === userId) {
+          // Check if the socket still exists
+          const socket = this.io.sockets.sockets.get(socketId);
+          if (!socket) {
+            staleEntries.push(participantId);
+          }
+        }
+      }
+
+      staleEntries.forEach(participantId => {
+        this.participantSocketMap.delete(participantId);
+        console.log(`🧹 Removed stale participant mapping: ${participantId}`);
+      });
+
+      console.log(`✅ Comprehensive cleanup completed for user ${userId} in meeting ${meetingId}`);
+      
+    } catch (error) {
+      console.error('❌ Error during comprehensive duplicate participant cleanup:', error);
+    }
   }
 
   /**

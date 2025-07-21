@@ -80,7 +80,6 @@ export const useMeetingEvents = (
           data.participant &&
           data.participant.id !== localParticipantIdRef.current
         ) {
-          console.log("👥 Participant joined:", data.participant.displayName);
           addParticipant(data.participant);
 
           // Connect via WebRTC if available
@@ -98,8 +97,6 @@ export const useMeetingEvents = (
       (data: any) => {
         const participantId = data.participantId || data.userId;
         if (participantId && participantId !== localParticipantIdRef.current) {
-          console.log("👋 Participant left:", participantId);
-
           const participant = getParticipantById(participantId);
           removeParticipantFromList(participantId);
 
@@ -131,11 +128,12 @@ export const useMeetingEvents = (
 
     handleWebRTCSignal: useCallback(
       (data: any) => {
-        // WebRTC signals are handled by the useWebRTC hook directly
-        // This handler is kept for consistency but doesn't duplicate the work
-        console.log("WebRTC signal received in meeting events (handled by useWebRTC):", data.type);
+        // Forward WebRTC signals to webrtc hook for proper handling
+        if (webrtc && data.from && data.signal) {
+          webrtc.handleSignalingData(data.from, data.signal, data.type);
+        }
       },
-      []
+      [webrtc]
     ),
 
     handleConnectionQuality: useCallback(
